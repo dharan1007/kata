@@ -1,12 +1,12 @@
 # KATA v3
 
-KATA is a deterministic research-automation substrate for humans and agents. One canonical semantic engine is exposed through the web UI, generic HTTPS, remote MCP, browser WebMCP, OpenAI-style function schemas, and Anthropic-style tool schemas.
+KATA is a deterministic research-automation substrate for humans and agents. One canonical semantic engine is exposed through the web UI, generic HTTPS, remote MCP, browser WebMCP, OpenAI-style function schemas, Anthropic-style tool schemas, and Gemini function-tool schemas.
 
 KATA does not substitute synthetic connector output when a real integration fails. The production connector is OpenAlex; upstream failures are explicit and typed.
 
 ## What is real
 
-- Live OpenAlex search with bounded retry, timeout, normalization, and no mock fallback.
+- Live OpenAlex search with bounded retry, timeout, normalization, optional API-key authentication, upstream rate-limit telemetry, and no mock fallback.
 - Browser-owned durable workspace using versioned local storage.
 - Allowlisted semantic commands: save work, priority, tags, and notes.
 - Preview-bound, transactional automations with `AFTER_SEARCH`, `WORKSPACE_OPEN`, and `MANUAL` triggers.
@@ -14,8 +14,8 @@ KATA does not substitute synthetic connector output when a real integration fail
 - Two-demonstration anti-unification into portable JSON-Schema programs.
 - Remote MCP with native `2026-07-28` stateless `server/discover`, `tools/list`, `tools/call`, `Mcp-Method`, `Mcp-Name`, list TTL/cache scope, optional bearer auth, and Origin allowlisting.
 - Backward-compatible MCP `2025-11-25` handshake-era support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`, without requiring 2026 routing headers.
-- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations.
-- Generic `/api/invoke` plus `/api/agents` OpenAI/Anthropic schema bridges derived from the same registry.
+- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations and invocation cancellation propagated through browser fetches and state commits.
+- Generic `/api/invoke` plus `/api/agents` OpenAI, Anthropic, and Gemini schema bridges derived from the same canonical registry.
 
 ## Product boundary
 
@@ -61,6 +61,27 @@ POST /api/invoke
   "arguments": {"query":"web agents","limit":5}
 }
 ```
+
+### OpenAlex production configuration
+
+KATA works without an OpenAlex key, but OpenAlex's current production guidance recommends using a free API key for real-scale applications because authenticated usage receives a materially larger daily allowance and exposes account-specific usage tracking.
+
+Optional environment variable:
+
+- `OPENALEX_API_KEY`: sent only server-side as `Authorization: Bearer ...` to `api.openalex.org`. It is never returned to KATA clients.
+
+When OpenAlex returns rate-limit headers, KATA exposes the non-secret usage telemetry under `meta.rateLimit`:
+
+```json
+{
+  "limit": 10000,
+  "remaining": 8766,
+  "creditsUsed": 1,
+  "resetSeconds": 43200
+}
+```
+
+This allows operators and agent integrations to distinguish healthy connector capacity from an approaching upstream budget/rate-limit boundary without exposing credentials.
 
 ## Remote MCP
 
@@ -120,7 +141,7 @@ Optional environment variables:
 
 ## WebMCP
 
-KATA targets the current `document.modelContext` producer API. A registration generation uses a shared `AbortController`; refreshing or disposing aborts old registrations. Browsers without WebMCP remain usable through HTTP/MCP and show compatibility status instead of pretending WebMCP is connected.
+KATA targets the current `document.modelContext` producer API. A registration generation uses a shared `AbortController`; refreshing or disposing aborts old registrations. Browsers without WebMCP remain usable through HTTP/MCP and show compatibility status instead of pretending WebMCP is connected. Invocation `AbortSignal`s are propagated through KATA's browser request path; cancelled search/automation/program executions do not commit partial browser workspace state.
 
 ## Security/release policy
 
