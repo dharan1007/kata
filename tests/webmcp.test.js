@@ -28,3 +28,20 @@ test('WebMCP forwards invocation AbortSignal to network-backed runtime operation
  assert.equal(seen.program.options?.signal,controller.signal);
  registry.dispose();
 });
+
+test('WebMCP cross-origin exposure is explicit, secure-origin-only, and never wildcarded',async()=>{
+ const calls=[];const mc={async registerTool(tool,options){calls.push({tool,options});}};
+ const runtime={
+  modelContext:mc,
+  webMcpExposedTo:['https://agent.example','https://partner.example/','http://insecure.example','*','not-a-url'],
+  search:async()=>({}),summary:()=>({}),listAutomations:()=>[],runAutomation:async()=>({}),listPrograms:()=>[],executeProgram:async()=>({})
+ };
+ const registry=createWebMcpRegistry(runtime);await registry.refresh();
+ assert.ok(calls.length>=5);
+ for(const call of calls){
+  assert.deepEqual(call.options.exposedTo,['https://agent.example','https://partner.example']);
+  assert.equal(call.options.exposedTo.includes('*'),false);
+  assert.equal(call.options.exposedTo.some(origin=>origin.startsWith('http://')),false);
+ }
+ registry.dispose();
+});
