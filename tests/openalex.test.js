@@ -10,3 +10,19 @@ test('OpenAlex retries one rate limit and normalizes real response shape',async(
  let n=0; const fake=async()=>{n++; if(n===1)return new Response('{}',{status:429}); return Response.json({results:[{id:'https://openalex.org/W1',title:'X',publication_year:2026,cited_by_count:7,authorships:[{author:{display_name:'A'}}],doi:'https://doi.org/10.x'}]});};
  const out=await searchOpenAlex('x',1,{fetchImpl:fake,retryDelayMs:0}); assert.equal(n,2); assert.equal(out.works[0].id,'W1'); assert.equal(out.works[0].citations,7);
 });
+
+test('OpenAlex uses configured API key and exposes upstream rate-limit telemetry',async()=>{
+ let seenAuthorization=null;
+ const fake=async(_url,options={})=>{
+  seenAuthorization=options.headers?.Authorization??null;
+  return Response.json({results:[{id:'https://openalex.org/W2',title:'Authenticated',publication_year:2026,cited_by_count:2,authorships:[]}]},{headers:{
+   'X-RateLimit-Limit':'10000',
+   'X-RateLimit-Remaining':'8766',
+   'X-RateLimit-Credits-Used':'1',
+   'X-RateLimit-Reset':'43200'
+  }});
+ };
+ const out=await searchOpenAlex('auth',1,{fetchImpl:fake,apiKey:'secret-test-key'});
+ assert.equal(seenAuthorization,'Bearer secret-test-key');
+ assert.deepEqual(out.meta.rateLimit,{limit:10000,remaining:8766,creditsUsed:1,resetSeconds:43200});
+});
