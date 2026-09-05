@@ -24,9 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
-      - name: Install metadata only
-        run: npm install --ignore-scripts --package-lock-only
       - name: Complete release gate
         run: npm run check
       - name: Verify expected build artifacts
