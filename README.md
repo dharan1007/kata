@@ -14,7 +14,7 @@ KATA does not substitute synthetic connector output when a real integration fail
 - Two-demonstration anti-unification into portable JSON-Schema programs.
 - Remote MCP with native `2026-07-28` stateless `server/discover`, `tools/list`, `tools/call`, `Mcp-Method`, `Mcp-Name`, list TTL/cache scope, optional bearer auth, and Origin allowlisting.
 - Backward-compatible MCP `2025-11-25` handshake-era support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`, without requiring 2026 routing headers.
-- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations and invocation cancellation propagated through browser fetches and state commits.
+- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations, invocation cancellation propagated through browser fetches/state commits, and opt-in secure-origin cross-frame exposure.
 - Generic `/api/invoke` plus `/api/agents` OpenAI, Anthropic, and Gemini schema bridges derived from the same canonical registry.
 
 ## Product boundary
@@ -142,6 +142,30 @@ Optional environment variables:
 ## WebMCP
 
 KATA targets the current `document.modelContext` producer API. A registration generation uses a shared `AbortController`; refreshing or disposing aborts old registrations. Browsers without WebMCP remain usable through HTTP/MCP and show compatibility status instead of pretending WebMCP is connected. Invocation `AbortSignal`s are propagated through KATA's browser request path; cancelled search/automation/program executions do not commit partial browser workspace state.
+
+Cross-origin tool discovery is default-deny. To intentionally expose an embedded KATA instance to specific parent/agent origins, add a trusted static configuration meta tag before KATA's module script:
+
+```html
+<meta name="kata-webmcp-exposed-to" content="https://agent.example,https://partner.example">
+```
+
+KATA validates this list and forwards only exact HTTPS origins through `registerTool(..., { exposedTo })`. Wildcards, HTTP origins, credentials, paths, query strings, fragments, and malformed values are discarded. If the meta tag is absent or no valid origins remain, KATA omits `exposedTo` entirely and retains WebMCP's same-origin default.
+
+Chrome's cross-origin WebMCP model has two additional gates outside KATA. The parent page must delegate the `tools` Permissions Policy to the iframe:
+
+```html
+<iframe src="https://kata.example" allow="tools"></iframe>
+```
+
+The parent/agent must then explicitly request KATA's origin when discovering tools:
+
+```js
+const tools = await document.modelContext.getTools({
+  fromOrigins: ['https://kata.example']
+});
+```
+
+All three conditions are required: parent `allow="tools"`, KATA `exposedTo`, and caller `fromOrigins`. KATA does not bypass any of these browser security boundaries.
 
 ## Security/release policy
 
