@@ -1,0 +1,2 @@
+import {method,send,errorResponse,readJsonBody} from '../lib/server/http.js';import {createToolRegistry} from '../lib/server/tools.js';
+export default async function handler(req,res){if(!method(req,res,['POST']))return;try{const body=await readJsonBody(req);const result=await createToolRegistry().invoke('kata_plan_triage',body,{depth:0});return send(res,200,{ok:true,...result},{'Cache-Control':'no-store'});}catch(error){return errorResponse(res,error);}}

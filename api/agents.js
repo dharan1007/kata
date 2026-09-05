@@ -1,0 +1,2 @@
+import {method,send} from '../lib/server/http.js';import {toolDefinitions,toOpenAITools,toAnthropicTools} from '../lib/server/tools.js';
+export default async function handler(req,res){if(!method(req,res,['GET']))return;return send(res,200,{ok:true,kata:toolDefinitions,openai:toOpenAITools(),anthropic:toAnthropicTools()},{'Cache-Control':'public, max-age=60, s-maxage=60'});}

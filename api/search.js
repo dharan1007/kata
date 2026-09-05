@@ -1,0 +1,2 @@
+import {method,send,errorResponse,queryParam} from '../lib/server/http.js';import {searchOpenAlex} from '../lib/server/openalex.js';
+export default async function handler(req,res){if(!method(req,res,['GET']))return;try{const query=queryParam(req,'query'),limit=Number(queryParam(req,'limit')??8);const data=await searchOpenAlex(query,limit);return send(res,200,{ok:true,...data},{'Cache-Control':'public, s-maxage=30, stale-while-revalidate=300'});}catch(error){return errorResponse(res,error);}}
