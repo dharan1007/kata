@@ -1,4 +1,12 @@
 function getModelContext(runtime){return runtime.modelContext??globalThis.document?.modelContext??null;}
+function secureOrigins(values){
+ const out=[];for(const raw of Array.isArray(values)?values:[]){try{const url=new URL(String(raw));if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)continue;const origin=url.origin;if(origin!=='null'&&!out.includes(origin))out.push(origin);}catch{}}
+ return out;
+}
+function exposureConfig(runtime){
+ const configured=runtime.webMcpExposedTo??globalThis.document?.querySelector?.('meta[name="kata-webmcp-exposed-to"]')?.content?.split(',').map(x=>x.trim()).filter(Boolean)??[];
+ return secureOrigins(configured);
+}
 export function createWebMcpRegistry(runtime,onStatus=()=>{}){
   let controller=null;
   const builtins=()=>[
@@ -11,7 +19,8 @@ export function createWebMcpRegistry(runtime,onStatus=()=>{}){
   async function refresh(){
     controller?.abort();controller=new AbortController();const mc=getModelContext(runtime);if(!mc?.registerTool){onStatus({supported:false,active:[],error:null});return;}
     const tools=builtins();for(const p of runtime.listPrograms())tools.push({name:p.name,description:p.description,inputSchema:p.inputSchema,annotations:{readOnlyHint:false,untrustedContentHint:false},execute:(input,context={})=>runtime.executeProgram(p.name,input,'agent',{signal:context.signal})});
-    const active=[];try{for(const tool of tools){await mc.registerTool(tool,{signal:controller.signal});active.push(tool.name);}onStatus({supported:true,active,error:null});}catch(error){controller.abort();onStatus({supported:true,active:[],error:error instanceof Error?error.message:String(error)});}
+    const exposedTo=exposureConfig(runtime),registrationOptions={signal:controller.signal,...(exposedTo.length?{exposedTo}:{})};
+    const active=[];try{for(const tool of tools){await mc.registerTool(tool,registrationOptions);active.push(tool.name);}onStatus({supported:true,active,error:null,...(exposedTo.length?{exposedTo}:{})});}catch(error){controller.abort();onStatus({supported:true,active:[],error:error instanceof Error?error.message:String(error),...(exposedTo.length?{exposedTo}:{})});}
   }
   return{refresh,dispose(){controller?.abort();controller=null;}};
 }
