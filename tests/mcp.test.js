@@ -2,11 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleMcpRequest, MCP_VERSION, LEGACY_MCP_VERSION} from '../lib/server/mcp.js';
 
+const modernMeta=(extra={})=>({'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},...extra});
+
 test('MCP 2026-07-28 discovery advertises dual-era compatibility and remains cacheable',async()=>{
- const discover=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'server/discover'},body:{jsonrpc:'2.0',id:1,method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION}}}});
+ const discover=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'server/discover'},body:{jsonrpc:'2.0',id:1,method:'server/discover',params:{_meta:modernMeta()}}});
  assert.equal(discover.status,200); assert.deepEqual(discover.body.result.supportedVersions,[MCP_VERSION,LEGACY_MCP_VERSION]);
- const list=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:2,method:'tools/list',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION}}}});
+ assert.equal(discover.body.result._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
+ const list=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:2,method:'tools/list',params:{_meta:modernMeta()}}});
  assert.ok(list.body.result.tools.length>=5); assert.equal(list.body.result.cacheScope,'public'); assert.ok(list.body.result.ttlMs>0);
+});
+
+test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
+ const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
+ assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
+
+ const missingCaps=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:21,method:'tools/list',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION}}}});
+ assert.equal(missingCaps.status,400); assert.equal(missingCaps.body.error.code,-32600);
+
+ const mismatch=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:22,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':'2026-01-01'})}}});
+ assert.equal(mismatch.status,400); assert.equal(mismatch.body.error.code,-32600);
 });
 
 test('MCP 2025-11-25 clients can initialize, acknowledge, and use tools without 2026 routing headers',async()=>{
@@ -29,14 +43,14 @@ test('MCP 2025-11-25 clients can initialize, acknowledge, and use tools without 
  assert.deepEqual(call.body.result.structuredContent.matches,[]);
 });
 
-test('MCP rejects header/body route mismatch and tool-name mismatch',async()=>{
- const r=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{}}}}); assert.equal(r.status,400);
- const t=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'other'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{query:'x'}}}}); assert.equal(t.status,400);
+test('MCP rejects header/body route mismatch and tool-name mismatch with the modern header-mismatch code',async()=>{
+ const r=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{},_meta:modernMeta()}}}); assert.equal(r.status,400); assert.equal(r.body.error.code,-32020);
+ const t=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'other'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{query:'x'},_meta:modernMeta()}}}); assert.equal(t.status,400); assert.equal(t.body.error.code,-32020);
 });
 
 test('MCP optional bearer auth and origin allowlist are enforced',async()=>{
  const env={MCP_BEARER_TOKEN:'secret',MCP_ALLOWED_ORIGINS:'https://example.com'};
- const req={headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list',origin:'https://evil.com'},body:{jsonrpc:'2.0',id:1,method:'tools/list',params:{}}};
+ const req={headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list',origin:'https://evil.com'},body:{jsonrpc:'2.0',id:1,method:'tools/list',params:{_meta:modernMeta()}}};
  const a=await handleMcpRequest(req,{env}); assert.equal(a.status,403);
  req.headers.origin='https://example.com'; const b=await handleMcpRequest(req,{env}); assert.equal(b.status,401);
  req.headers.authorization='Bearer secret'; const c=await handleMcpRequest(req,{env}); assert.equal(c.status,200);
