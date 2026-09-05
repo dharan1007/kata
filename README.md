@@ -22,7 +22,7 @@ KATA's browser triggers execute while KATA is open. It does not claim unattended
 
 ## Run and verify
 
-Requirement: Node.js 22+.
+Requirement: Node.js 24.x, matching the production Vercel runtime and release gate.
 
 ```bash
 npm test
