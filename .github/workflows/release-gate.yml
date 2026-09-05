@@ -45,7 +45,14 @@ jobs:
           path: |
             api/
             lib/
+            scripts/
+            src/
+            tests/
             dist/
+            index.html
+            style.css
+            favicon.svg
+            robots.txt
             package.json
             vercel.json
             README.md
