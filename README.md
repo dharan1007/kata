@@ -66,9 +66,50 @@ POST /api/invoke
 
 Endpoint: `POST /api/mcp`.
 
-Modern clients should use protocol `2026-07-28`: include `MCP-Protocol-Version` plus `Mcp-Method`; `tools/call` additionally includes `Mcp-Name` matching `params.name`.
+### MCP 2026-07-28
 
-Handshake-era clients using `2025-11-25` are accepted on the same endpoint. They may initialize with the standard `initialize` request, acknowledge with `notifications/initialized`, and then call `tools/list`, `tools/call`, or `ping` using `MCP-Protocol-Version: 2025-11-25`. They do not need the 2026 `Mcp-Method` or `Mcp-Name` routing headers.
+Modern requests are stateless and self-describing. Every modern request must include the `MCP-Protocol-Version` and `Mcp-Method` routing headers. A `tools/call` request must additionally include `Mcp-Name`, and that value must exactly match `params.name`.
+
+Every modern request must also include `params._meta` with:
+
+- `io.modelcontextprotocol/protocolVersion`: exactly `2026-07-28`. It must match the `MCP-Protocol-Version` header.
+- `io.modelcontextprotocol/clientCapabilities`: an object. Use `{}` when the client has no additional capabilities to declare.
+- `io.modelcontextprotocol/clientInfo`: optional client information object.
+
+A valid tool call is:
+
+```http
+POST /api/mcp
+Content-Type: application/json
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: kata_search_research
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "kata_search_research",
+    "arguments": {
+      "query": "web agents",
+      "limit": 3
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+```
+
+KATA rejects missing modern metadata, protocol header/body disagreement, `Mcp-Method` disagreement, and `Mcp-Name`/tool-name disagreement rather than silently guessing the caller's intent. `GET /api/capabilities` publishes these required headers and metadata keys so clients can discover the request contract programmatically.
+
+### MCP 2025-11-25 compatibility
+
+Handshake-era clients using `2025-11-25` are accepted on the same endpoint. They may initialize with the standard `initialize` request, acknowledge with `notifications/initialized`, and then call `tools/list`, `tools/call`, or `ping` using `MCP-Protocol-Version: 2025-11-25`. They do not need the 2026 `Mcp-Method`, `Mcp-Name`, or 2026 `_meta` request envelope.
 
 `GET /api/capabilities` exposes both supported versions so agents and integrations can choose the correct path explicitly.
 
