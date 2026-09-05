@@ -20,7 +20,10 @@ export function createApp(root){
     const out=await invoke('kata_apply_command',{workspace:state.workspace,command});state.workspace=out.workspace;if(source==='human'&&state.recording){state.demos[state.recording].push(clone(command));activity(`${command.kind} recorded in Demo ${state.recording}.`,'human','command',{command});}else activity(`${command.kind} completed.`,source,'command',{command});persist();render();return out;
   }
   async function search(query=state.lastQuery,limit=8,source='human',{signal}={}){
-    const data=await request(`/api/search?query=${encodeURIComponent(query)}&limit=${Math.max(1,Math.min(25,limit))}`,{signal});signal?.throwIfAborted();state.lastQuery=query;state.results=data.works;for(const w of data.works)state.workspace.knownWorks[w.id]=w;activity(`Loaded ${data.works.length} live OpenAlex works for “${query}”.`,source,'search');persist();render();await runTrigger('AFTER_SEARCH',data.works,{signal});return data;
+    const before=signal?clone(state):null;
+    try{
+      const data=await request(`/api/search?query=${encodeURIComponent(query)}&limit=${Math.max(1,Math.min(25,limit))}`,{signal});signal?.throwIfAborted();state.lastQuery=query;state.results=data.works;for(const w of data.works)state.workspace.knownWorks[w.id]=w;activity(`Loaded ${data.works.length} live OpenAlex works for “${query}”.`,source,'search');persist();render();await runTrigger('AFTER_SEARCH',data.works,{signal});signal?.throwIfAborted();return data;
+    }catch(error){if(signal?.aborted&&before){state=before;persist();render();}throw error;}
   }
   function candidates(){return state.results.length?state.results:Object.values(state.workspace.knownWorks);}
   async function previewAutomation(automation,works=candidates(),{signal}={}){return invoke('kata_preview_automation',{workspace:state.workspace,works,automation},{signal});}
