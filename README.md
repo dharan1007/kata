@@ -165,7 +165,9 @@ const tools = await document.modelContext.getTools({
 });
 ```
 
-All three conditions are required: parent `allow="tools"`, KATA `exposedTo`, and caller `fromOrigins`. KATA does not bypass any of these browser security boundaries.
+All three WebMCP conditions are required: parent `allow="tools"`, KATA `exposedTo`, and caller `fromOrigins`. KATA does not bypass any of these browser security boundaries.
+
+Framing policy is a separate browser boundary. The stock `vercel.json` intentionally ships `frame-ancestors 'none'` and `X-Frame-Options: DENY`, so the public KATA deployment cannot be embedded by another origin. Operators who intentionally enable cross-origin iframe use must change their deployment's framing policy to an explicit trusted-parent allowlist; do not use wildcard framing. The hosted KATA deployment remains non-embeddable unless that policy is deliberately changed.
 
 ## Security/release policy
 
