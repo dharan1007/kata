@@ -1,7 +1,7 @@
 import {createWebMcpRegistry} from './webmcp.js';
 const STORAGE='kata.v3.local';
 const routes=[['Dashboard','/dashboard'],['Research','/research'],['Automations','/automations'],['Teach','/teach'],['Tools','/tools'],['Developers','/developers'],['Activity','/activity'],['Learn','/learn'],['Settings','/settings']];
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=v=>structuredClone(v);const now=()=>new Date().toISOString();
 const emptyWorkspace=()=>({version:1,knownWorks:{},savedWorks:{},runs:{},activity:[]});
 function defaultState(){return{workspace:emptyWorkspace(),results:[],automations:[],programs:[],activity:[],demos:{A:[],B:[]},recording:null,lastQuery:'web agents'};}
