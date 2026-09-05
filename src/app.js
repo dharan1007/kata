@@ -1,35 +1,35 @@
 import {createWebMcpRegistry} from './webmcp.js';
 const STORAGE='kata.v3.local';
 const routes=[['Dashboard','/dashboard'],['Research','/research'],['Automations','/automations'],['Teach','/teach'],['Tools','/tools'],['Developers','/developers'],['Activity','/activity'],['Learn','/learn'],['Settings','/settings']];
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 const clone=v=>structuredClone(v);const now=()=>new Date().toISOString();
 const emptyWorkspace=()=>({version:1,knownWorks:{},savedWorks:{},runs:{},activity:[]});
 function defaultState(){return{workspace:emptyWorkspace(),results:[],automations:[],programs:[],activity:[],demos:{A:[],B:[]},recording:null,lastQuery:'web agents'};}
 function load(){try{const x=JSON.parse(localStorage.getItem(STORAGE));if(x&&x.workspace?.version===1&&Array.isArray(x.automations)&&Array.isArray(x.programs))return{...defaultState(),...x};}catch{}return defaultState();}
 function safeLink(value){try{const u=new URL(value);return u.protocol==='https:'||u.protocol==='http:'?u.href:null;}catch{return null;}}
 function human(code){return({INVALID_ARGUMENTS:'Check the fields and try again.',INVALID_QUERY:'Enter a search query.',UPSTREAM_TIMEOUT:'OpenAlex timed out. Retry the search.',UPSTREAM_RATE_LIMITED:'OpenAlex is rate limiting requests. Retry shortly.',UPSTREAM_UNAVAILABLE:'OpenAlex is temporarily unavailable.',STALE_PREVIEW:'This automation changed after preview. Preview it again before running.',UNKNOWN_WORK:'That work is not loaded anymore.',WORK_NOT_SAVED:'Save the work before changing it.',DEMO_STRUCTURE_MISMATCH:'The two demonstrations use different action structures.',TOOL_DEPTH_EXCEEDED:'Nested tool execution exceeded KATA’s safety limit.'}[code]??code??'Unexpected error');}
-async function request(path,{method='GET',body}={}){const r=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});let data;try{data=await r.json();}catch{throw new Error(`HTTP_${r.status}`);}if(!r.ok||data.ok===false){const e=new Error(data?.error?.code??`HTTP_${r.status}`);e.details=data?.error?.details;throw e;}return data;}
+async function request(path,{method='GET',body,signal}={}){signal?.throwIfAborted();const r=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,signal});let data;try{data=await r.json();}catch(error){if(signal?.aborted)throw signal.reason??error;throw new Error(`HTTP_${r.status}`);}signal?.throwIfAborted();if(!r.ok||data.ok===false){const e=new Error(data?.error?.code??`HTTP_${r.status}`);e.details=data?.error?.details;throw e;}return data;}
 
 export function createApp(root){
   if(!root)throw new Error('APP_ROOT_MISSING');let state=load(),route=location.pathname,health=null,webmcp={supported:false,active:[],error:null};let automationDraft=null,automationPreview=null,developerOutput='Choose a tool and send a real request.';let disposed=false;
   const persist=()=>localStorage.setItem(STORAGE,JSON.stringify(state));
   const activity=(message,source='human',type='info',meta={})=>{state.activity.unshift({message,source,type,meta,at:now()});state.activity=state.activity.slice(0,100);persist();};
   const summary=()=>({knownWorks:Object.keys(state.workspace.knownWorks).length,savedWorks:Object.keys(state.workspace.savedWorks).length,automations:state.automations.length,learnedTools:state.programs.map(p=>p.name),recording:state.recording});
-  async function invoke(name,args){const data=await request('/api/invoke',{method:'POST',body:{name,arguments:args}});return data.result;}
+  async function invoke(name,args,{signal}={}){const data=await request('/api/invoke',{method:'POST',body:{name,arguments:args},signal});signal?.throwIfAborted();return data.result;}
   async function apply(command,source='human'){
     const out=await invoke('kata_apply_command',{workspace:state.workspace,command});state.workspace=out.workspace;if(source==='human'&&state.recording){state.demos[state.recording].push(clone(command));activity(`${command.kind} recorded in Demo ${state.recording}.`,'human','command',{command});}else activity(`${command.kind} completed.`,source,'command',{command});persist();render();return out;
   }
-  async function search(query=state.lastQuery,limit=8,source='human'){
-    const data=await request(`/api/search?query=${encodeURIComponent(query)}&limit=${Math.max(1,Math.min(25,limit))}`);state.lastQuery=query;state.results=data.works;for(const w of data.works)state.workspace.knownWorks[w.id]=w;activity(`Loaded ${data.works.length} live OpenAlex works for “${query}”.`,source,'search');persist();render();await runTrigger('AFTER_SEARCH',data.works);return data;
+  async function search(query=state.lastQuery,limit=8,source='human',{signal}={}){
+    const data=await request(`/api/search?query=${encodeURIComponent(query)}&limit=${Math.max(1,Math.min(25,limit))}`,{signal});signal?.throwIfAborted();state.lastQuery=query;state.results=data.works;for(const w of data.works)state.workspace.knownWorks[w.id]=w;activity(`Loaded ${data.works.length} live OpenAlex works for “${query}”.`,source,'search');persist();render();await runTrigger('AFTER_SEARCH',data.works,{signal});return data;
   }
   function candidates(){return state.results.length?state.results:Object.values(state.workspace.knownWorks);}
-  async function previewAutomation(automation,works=candidates()){return invoke('kata_preview_automation',{workspace:state.workspace,works,automation});}
-  async function runAutomation(id,source='human',works=candidates()){
-    const stored=state.automations.find(a=>a.id===id);if(!stored)throw new Error('AUTOMATION_NOT_FOUND');const p=await previewAutomation(stored,works);const out=await invoke('kata_run_automation',{workspace:state.workspace,works,automation:stored,previewFingerprint:p.preview.fingerprint});state.workspace=out.workspace;activity(`${stored.name}: ${out.receipt.status}, ${out.receipt.processed??0} processed.`,source,'automation',out.receipt);persist();render();return out.receipt;
+  async function previewAutomation(automation,works=candidates(),{signal}={}){return invoke('kata_preview_automation',{workspace:state.workspace,works,automation},{signal});}
+  async function runAutomation(id,source='human',works=candidates(),{signal}={}){
+    signal?.throwIfAborted();const stored=state.automations.find(a=>a.id===id);if(!stored)throw new Error('AUTOMATION_NOT_FOUND');const p=await previewAutomation(stored,works,{signal});signal?.throwIfAborted();const out=await invoke('kata_run_automation',{workspace:state.workspace,works,automation:stored,previewFingerprint:p.preview.fingerprint},{signal});signal?.throwIfAborted();state.workspace=out.workspace;activity(`${stored.name}: ${out.receipt.status}, ${out.receipt.processed??0} processed.`,source,'automation',out.receipt);persist();render();return out.receipt;
   }
-  async function runTrigger(trigger,works){for(const a of state.automations.filter(x=>x.enabled&&x.trigger===trigger)){try{await runAutomation(a.id,'automation',works);}catch(error){activity(`${a.name}: ${human(error.message)}`,'automation','error',{code:error.message});}}render();}
-  async function executeProgram(name,input,source='human'){
-    const p=state.programs.find(x=>x.name===name);if(!p)throw new Error('TOOL_NOT_FOUND');const data=await request('/api/execute',{method:'POST',body:{workspace:state.workspace,program:p,input}});state.workspace=data.workspace;activity(`${name} executed ${data.completed} semantic action(s).`,source,'tool');persist();render();return{completed:data.completed,workspaceSummary:summary()};
+  async function runTrigger(trigger,works,{signal}={}){signal?.throwIfAborted();for(const a of state.automations.filter(x=>x.enabled&&x.trigger===trigger)){try{await runAutomation(a.id,'automation',works,{signal});}catch(error){if(signal?.aborted)throw signal.reason??error;activity(`${a.name}: ${human(error.message)}`,'automation','error',{code:error.message});}}signal?.throwIfAborted();render();}
+  async function executeProgram(name,input,source='human',{signal}={}){
+    signal?.throwIfAborted();const p=state.programs.find(x=>x.name===name);if(!p)throw new Error('TOOL_NOT_FOUND');const data=await request('/api/execute',{method:'POST',body:{workspace:state.workspace,program:p,input},signal});signal?.throwIfAborted();state.workspace=data.workspace;activity(`${name} executed ${data.completed} semantic action(s).`,source,'tool');persist();render();return{completed:data.completed,workspaceSummary:summary()};
   }
   const registry=createWebMcpRegistry({getWorkspace:()=>state.workspace,setWorkspace:x=>{state.workspace=x;persist();render();},search,summary,listAutomations:()=>clone(state.automations),runAutomation,listPrograms:()=>clone(state.programs),executeProgram},s=>{webmcp=s;if(!disposed)render();});
   function navigate(path){history.pushState({},'',path);route=path;window.scrollTo({top:0,behavior:'auto'});render();}
