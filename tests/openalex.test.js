@@ -26,3 +26,12 @@ test('OpenAlex uses configured API key and exposes upstream rate-limit telemetry
  assert.equal(seenAuthorization,'Bearer secret-test-key');
  assert.deepEqual(out.meta.rateLimit,{limit:10000,remaining:8766,creditsUsed:1,resetSeconds:43200});
 });
+
+test('OpenAlex retries transient failures with exponential backoff',async()=>{
+ let attempts=0;const delays=[];
+ const fake=async()=>{attempts++;if(attempts<=3)return new Response('{}',{status:500});return Response.json({results:[]});};
+ const out=await searchOpenAlex('backoff',1,{fetchImpl:fake,retries:3,retryDelayMs:100,sleepImpl:async ms=>{delays.push(ms);}});
+ assert.equal(attempts,4);
+ assert.deepEqual(delays,[100,200,400]);
+ assert.equal(out.meta.source,'openalex');
+});
