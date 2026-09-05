@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createToolRegistry, toolDefinitions, toOpenAITools, toAnthropicTools} from '../lib/server/tools.js';
+import {createToolRegistry, toolDefinitions, toOpenAITools, toAnthropicTools, toGeminiInteractionTools, toGeminiFunctionDeclarations} from '../lib/server/tools.js';
 import {createWorkspace} from '../lib/server/engine.js';
 
 test('tool schemas reject unexpected inputs before handlers run',async()=>{
@@ -9,8 +9,10 @@ test('tool schemas reject unexpected inputs before handlers run',async()=>{
 });
 
 test('agent bridges derive from the same canonical registry',()=>{
- assert.equal(toOpenAITools().length,toolDefinitions.length); assert.equal(toAnthropicTools().length,toolDefinitions.length);
+ assert.equal(toOpenAITools().length,toolDefinitions.length); assert.equal(toAnthropicTools().length,toolDefinitions.length); assert.equal(toGeminiInteractionTools().length,toolDefinitions.length); assert.equal(toGeminiFunctionDeclarations().length,toolDefinitions.length);
  assert.equal(toOpenAITools()[0].type,'function'); assert.ok(toAnthropicTools()[0].input_schema);
+ const interaction=toGeminiInteractionTools()[0];assert.equal(interaction.type,'function');assert.equal(interaction.name,toolDefinitions[0].name);assert.deepEqual(interaction.parameters,toolDefinitions[0].inputSchema);
+ const declaration=toGeminiFunctionDeclarations()[0];assert.equal(declaration.name,toolDefinitions[0].name);assert.deepEqual(declaration.parameters,toolDefinitions[0].inputSchema);
 });
 
 test('recursive tool invocation is capped',async()=>{
