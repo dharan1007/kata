@@ -1,6 +1,6 @@
 # KATA v3
 
-KATA is a deterministic research-automation substrate for humans and agents. One canonical semantic engine is exposed through the web UI, generic HTTPS, remote MCP `2026-07-28`, browser WebMCP, OpenAI-style function schemas, and Anthropic-style tool schemas.
+KATA is a deterministic research-automation substrate for humans and agents. One canonical semantic engine is exposed through the web UI, generic HTTPS, remote MCP, browser WebMCP, OpenAI-style function schemas, and Anthropic-style tool schemas.
 
 KATA does not substitute synthetic connector output when a real integration fails. The production connector is OpenAlex; upstream failures are explicit and typed.
 
@@ -12,13 +12,14 @@ KATA does not substitute synthetic connector output when a real integration fail
 - Preview-bound, transactional automations with `AFTER_SEARCH`, `WORKSPACE_OPEN`, and `MANUAL` triggers.
 - Nested automation tool calls with a maximum execution depth of four.
 - Two-demonstration anti-unification into portable JSON-Schema programs.
-- Remote MCP `2026-07-28` with `server/discover`, `tools/list`, `tools/call`, `Mcp-Method`, `Mcp-Name`, list TTL/cache scope, optional bearer auth, and Origin allowlisting.
+- Remote MCP with native `2026-07-28` stateless `server/discover`, `tools/list`, `tools/call`, `Mcp-Method`, `Mcp-Name`, list TTL/cache scope, optional bearer auth, and Origin allowlisting.
+- Backward-compatible MCP `2025-11-25` handshake-era support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`, without requiring 2026 routing headers.
 - Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations.
 - Generic `/api/invoke` plus `/api/agents` OpenAI/Anthropic schema bridges derived from the same registry.
 
 ## Product boundary
 
-KATA's browser triggers execute while KATA is open. It does not claim unattended cloud scheduling because this release intentionally has no durable authenticated cloud workspace/runner. Protocol state is stateless: callers send workspace snapshots and receive validated next snapshots.
+KATA's browser triggers execute while KATA is open. It does not claim unattended cloud scheduling because this release intentionally has no durable authenticated cloud workspace/runner. Protocol state is stateless: callers send workspace snapshots and receive validated next snapshots. Legacy MCP compatibility is also served without hidden server session state.
 
 ## Run and verify
 
@@ -65,7 +66,11 @@ POST /api/invoke
 
 Endpoint: `POST /api/mcp`.
 
-Modern requests use protocol `2026-07-28` and include `MCP-Protocol-Version` plus `Mcp-Method`; `tools/call` additionally includes `Mcp-Name` matching `params.name`.
+Modern clients should use protocol `2026-07-28`: include `MCP-Protocol-Version` plus `Mcp-Method`; `tools/call` additionally includes `Mcp-Name` matching `params.name`.
+
+Handshake-era clients using `2025-11-25` are accepted on the same endpoint. They may initialize with the standard `initialize` request, acknowledge with `notifications/initialized`, and then call `tools/list`, `tools/call`, or `ping` using `MCP-Protocol-Version: 2025-11-25`. They do not need the 2026 `Mcp-Method` or `Mcp-Name` routing headers.
+
+`GET /api/capabilities` exposes both supported versions so agents and integrations can choose the correct path explicitly.
 
 Optional environment variables:
 
