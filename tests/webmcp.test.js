@@ -33,7 +33,7 @@ test('WebMCP cross-origin exposure accepts potentially trustworthy local develop
  const calls=[];const mc={async registerTool(tool,options){calls.push({tool,options});}};
  const runtime={
   modelContext:mc,
-  webMcpExposedTo:['https://agent.example','https://partner.example/','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173','http://insecure.example','*','not-a-url'],
+  webMcpExposedTo:['https://agent.example','https://partner.example/','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173','http://insecure.example','http://127.example','*','not-a-url'],
   search:async()=>({}),summary:()=>({}),listAutomations:()=>[],runAutomation:async()=>({}),listPrograms:()=>[],executeProgram:async()=>({})
  };
  const registry=createWebMcpRegistry(runtime);await registry.refresh();
@@ -42,6 +42,7 @@ test('WebMCP cross-origin exposure accepts potentially trustworthy local develop
   assert.deepEqual(call.options.exposedTo,['https://agent.example','https://partner.example','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173']);
   assert.equal(call.options.exposedTo.includes('*'),false);
   assert.equal(call.options.exposedTo.includes('http://insecure.example'),false);
+  assert.equal(call.options.exposedTo.includes('http://127.example'),false);
  }
  registry.dispose();
 });
