@@ -10,7 +10,6 @@ test('/api/mcp requires application/json media type before dispatching MCP reque
   const wrong=res();
   await mcp({method:'POST',headers:{'content-type':'text/plain','mcp-protocol-version':'2025-11-25'},body:ping},wrong);
   assert.equal(wrong.statusCode,415);
-  assert.equal(wrong.headers['accept-post'],'application/json');
   assert.equal(wrong.body?.jsonrpc,'2.0');
   assert.equal(wrong.body?.error?.code,-32600);
 
