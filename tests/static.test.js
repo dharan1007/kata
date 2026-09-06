@@ -7,6 +7,8 @@ test('developer MCP example is a self-describing 2026-07-28 request',()=>{
   const start=app.indexOf('<h2>MCP request example</h2>');
   assert.notEqual(start,-1,'developer MCP example must exist');
   const example=app.slice(start,start+1400);
+  assert.match(example,/Content-Type: application\/json/);
+  assert.match(example,/Accept: application\/json, text\/event-stream/);
   assert.match(example,/MCP-Protocol-Version: 2026-07-28/);
   assert.match(example,/io\.modelcontextprotocol\/protocolVersion/);
   assert.match(example,/io\.modelcontextprotocol\/clientCapabilities/);
