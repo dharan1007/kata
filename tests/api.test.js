@@ -39,6 +39,22 @@ test('/api/mcp allows an explicitly configured browser origin and emits usable C
 
 test('/api/mcp refuses CORS preflight for origins outside the configured allowlist',async()=>withMcpOrigins('https://agent.example',async()=>{const r=res();await mcp({method:'OPTIONS',headers:{origin:'https://evil.example'}},r);assert.equal(r.statusCode,403);assert.equal(r.headers['access-control-allow-origin'],undefined);assert.equal(r.headers.vary,'Origin');assert.deepEqual(r.body,{error:'ORIGIN_NOT_ALLOWED'});}));
 
+test('/api/mcp rejects disallowed POST origins before media negotiation or body parsing',async()=>withMcpOrigins('https://agent.example',async()=>{
+  const invalidMedia=res();
+  await mcp({method:'POST',headers:{origin:'https://evil.example','content-type':'text/plain'}},invalidMedia);
+  assert.equal(invalidMedia.statusCode,403);
+  assert.equal(invalidMedia.headers['access-control-allow-origin'],undefined);
+  assert.equal(invalidMedia.headers.vary,'Origin');
+  assert.deepEqual(invalidMedia.body,{error:'ORIGIN_NOT_ALLOWED'});
+
+  const request={method:'POST',headers:{origin:'https://evil.example','content-type':'application/json',accept:MCP_ACCEPT,'mcp-protocol-version':'2025-11-25'}};
+  Object.defineProperty(request,'body',{get(){throw new Error('BODY_SHOULD_NOT_BE_READ');}});
+  const unread=res();
+  await mcp(request,unread);
+  assert.equal(unread.statusCode,403);
+  assert.deepEqual(unread.body,{error:'ORIGIN_NOT_ALLOWED'});
+}));
+
 test('/api/mcp reflects the allowed origin on actual MCP responses without using a wildcard',async()=>withMcpOrigins('https://agent.example',async()=>{const r=res();await mcp({method:'POST',headers:{accept:MCP_ACCEPT,origin:'https://agent.example','content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:{jsonrpc:'2.0',id:1,method:'ping',params:{}}},r);assert.equal(r.statusCode,200);assert.equal(r.headers['access-control-allow-origin'],'https://agent.example');assert.notEqual(r.headers['access-control-allow-origin'],'*');assert.equal(r.headers.vary,'Origin');}));
 
 test('query parsing uses WHATWG URL without touching deprecated req.query compatibility layer',()=>{const req={url:'/api/search?query=machine%20learning&limit=2'};Object.defineProperty(req,'query',{get(){throw new Error('REQ_QUERY_ACCESSED');}});assert.equal(queryParam(req,'query'),'machine learning');assert.equal(queryParam(req,'limit'),'2');assert.equal(queryParam(req,'missing'),null);});
