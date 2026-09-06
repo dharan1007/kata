@@ -12,6 +12,19 @@ test('MCP 2026-07-28 discovery advertises dual-era compatibility and remains cac
  assert.ok(list.body.result.tools.length>=5); assert.equal(list.body.result.cacheScope,'public'); assert.ok(list.body.result.ttlMs>0);
 });
 
+test('MCP rejects malformed JSON-RPC requests before invoking tools',async()=>{
+ let invoked=0;
+ const registry={list:()=>[],invoke:async()=>{invoked++;return{unexpected:true};}};
+ const base={headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'}};
+ const missingVersion=await handleMcpRequest({...base,body:{id:1,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
+ assert.equal(missingVersion.status,400);assert.equal(missingVersion.body.error.code,-32600);
+ const missingId=await handleMcpRequest({...base,body:{jsonrpc:'2.0',method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
+ assert.equal(missingId.status,400);assert.equal(missingId.body.error.code,-32600);
+ const nullId=await handleMcpRequest({...base,body:{jsonrpc:'2.0',id:null,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
+ assert.equal(nullId.status,400);assert.equal(nullId.body.error.code,-32600);
+ assert.equal(invoked,0);
+});
+
 test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
