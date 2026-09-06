@@ -74,6 +74,27 @@ test('MCP sanitizes unexpected tool crashes while keeping them model-visible',as
  assert.doesNotMatch(response.body.result.content[0].text,/secret|private_users|postgres/i);
 });
 
+test('MCP reports unknown tools as Invalid Params protocol errors in both protocol eras',async()=>{
+ const registry={list:()=>[],invoke:async()=>{throw new Error('TOOL_NOT_FOUND');}};
+ const modern=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'missing_tool'},
+  body:{jsonrpc:'2.0',id:33,method:'tools/call',params:{name:'missing_tool',arguments:{},_meta:modernMeta()}}
+ },{registry});
+ assert.equal(modern.status,400);
+ assert.equal(modern.body.error.code,-32602);
+ assert.match(modern.body.error.message,/unknown tool/i);
+ assert.equal(modern.body.result,undefined);
+
+ const legacy=await handleMcpRequest({
+  headers:{'mcp-protocol-version':LEGACY_MCP_VERSION},
+  body:{jsonrpc:'2.0',id:34,method:'tools/call',params:{name:'missing_tool',arguments:{}}}
+ },{registry});
+ assert.equal(legacy.status,400);
+ assert.equal(legacy.body.error.code,-32602);
+ assert.match(legacy.body.error.message,/unknown tool/i);
+ assert.equal(legacy.body.result,undefined);
+});
+
 test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
