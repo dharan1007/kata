@@ -19,6 +19,25 @@ function requestMediaType(req){
   return String(raw??'').split(';',1)[0].trim().toLowerCase();
 }
 
+function acceptedMediaTypes(req){
+  const raw=req.headers?.accept??req.headers?.Accept;
+  const accepted=new Set();
+  for(const entry of String(raw??'').split(',')){
+    const parts=entry.split(';').map(x=>x.trim()).filter(Boolean);
+    const mediaType=String(parts.shift()??'').toLowerCase();
+    if(!mediaType)continue;
+    const qPart=parts.find(x=>x.toLowerCase().startsWith('q='));
+    const q=qPart==null?1:Number(qPart.slice(2));
+    if(Number.isFinite(q)&&q>0)accepted.add(mediaType);
+  }
+  return accepted;
+}
+
+function acceptsMcpResponses(req){
+  const accepted=acceptedMediaTypes(req);
+  return accepted.has('application/json')&&accepted.has('text/event-stream');
+}
+
 export default async function handler(req,res){
   const corsAllowed=applyCors(req,res);
   if(req.method==='OPTIONS'){
@@ -30,6 +49,7 @@ export default async function handler(req,res){
   }
   if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'},{Allow:'POST, OPTIONS'});
   if(requestMediaType(req)!=='application/json')return send(res,415,{jsonrpc:'2.0',id:null,error:{code:-32600,message:'MCP POST requests require Content-Type: application/json'}});
+  if(!acceptsMcpResponses(req))return send(res,406,{jsonrpc:'2.0',id:null,error:{code:-32000,message:'Not Acceptable: MCP clients must accept both application/json and text/event-stream'}});
   try{
     const body=await readJsonBody(req,262144);
     const out=await handleMcpRequest({headers:req.headers??{},body});
