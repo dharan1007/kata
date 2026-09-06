@@ -18,7 +18,7 @@ test('/api/mcp requires application/json media type before dispatching MCP reque
   assert.equal(missing.statusCode,415);
 
   const valid=res();
-  await mcp({method:'POST',headers:{'content-type':'Application/JSON; charset=utf-8','mcp-protocol-version':'2025-11-25'},body:ping},valid);
+  await mcp({method:'POST',headers:{accept:'application/json, text/event-stream','content-type':'Application/JSON; charset=utf-8','mcp-protocol-version':'2025-11-25'},body:ping},valid);
   assert.equal(valid.statusCode,200);
   assert.deepEqual(valid.body,{jsonrpc:'2.0',id:1,result:{}});
 });
