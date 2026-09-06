@@ -31,5 +31,7 @@ test('authenticated MCP discovery responses are never marked public-cacheable', 
     const cacheControl = String(response.headers?.['Cache-Control'] ?? '').toLowerCase();
     assert.match(cacheControl, /no-store/);
     assert.doesNotMatch(cacheControl, /\bpublic\b/);
+    assert.equal(response.body?.result?.cacheScope, 'private');
+    assert.equal(response.body?.result?.ttlMs, 0);
   }
 });
