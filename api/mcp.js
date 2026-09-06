@@ -44,6 +44,15 @@ function transportError(error){
   return{status:500,code:-32603,message:'Internal error'};
 }
 
+function requestCancellation(req,res){
+  const controller=new AbortController();
+  const abort=()=>{if(!controller.signal.aborted)controller.abort(new Error('CLIENT_DISCONNECTED'));};
+  const close=()=>{if(!res.writableEnded)abort();};
+  req.on?.('aborted',abort);
+  res.on?.('close',close);
+  return{signal:controller.signal,cleanup(){req.off?.('aborted',abort);res.off?.('close',close);}};
+}
+
 export default async function handler(req,res){
   const corsAllowed=applyCors(req,res);
   if(req.method==='OPTIONS'){
@@ -57,14 +66,17 @@ export default async function handler(req,res){
   if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'},{Allow:'POST, OPTIONS'});
   if(requestMediaType(req)!=='application/json')return send(res,415,{jsonrpc:'2.0',id:null,error:{code:-32600,message:'MCP POST requests require Content-Type: application/json'}});
   if(!acceptsMcpResponses(req))return send(res,406,{jsonrpc:'2.0',id:null,error:{code:-32000,message:'Not Acceptable: MCP clients must accept both application/json and text/event-stream'}});
+  const cancellation=requestCancellation(req,res);
   try{
     const body=await readJsonBody(req,262144);
-    const out=await handleMcpRequest({headers:req.headers??{},body});
+    const out=await handleMcpRequest({headers:req.headers??{},body},{signal:cancellation.signal});
     for(const[k,v]of Object.entries(out.headers??{}))res.setHeader(k,v);
     if(out.body===undefined)return res.status(out.status).end();
     return send(res,out.status,out.body);
   }catch(error){
     const failure=transportError(error);
     return send(res,failure.status,{jsonrpc:'2.0',id:null,error:{code:failure.code,message:failure.message}});
+  }finally{
+    cancellation.cleanup();
   }
 }

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
 import health from '../api/health.js';
 import capabilities from '../api/capabilities.js';
 import openapi from '../api/openapi.js';
@@ -70,6 +71,25 @@ test('/api/mcp sanitizes unexpected transport failures instead of exposing runti
   assert.equal(r.body?.error?.code,-32603);
   assert.equal(r.body?.error?.message,'Internal error');
   assert.doesNotMatch(JSON.stringify(r.body),/internal-proxy|tenant_db|socket reset/i);
+});
+
+test('/api/mcp aborts upstream tool work when a modern client disconnects',async()=>{
+  const previousFetch=globalThis.fetch;
+  let observedSignal;
+  globalThis.fetch=async(_url,{signal})=>new Promise(resolve=>{
+    observedSignal=signal;
+    setTimeout(()=>resolve({ok:true,status:200,headers:new Headers(),json:async()=>({results:[]})}),30);
+  });
+  const r=Object.assign(new EventEmitter(),res(),{writableEnded:false});
+  const baseJson=r.json.bind(r),baseEnd=r.end.bind(r);
+  r.json=v=>{r.writableEnded=true;return baseJson(v);};
+  r.end=v=>{r.writableEnded=true;return baseEnd(v);};
+  const request={method:'POST',headers:{accept:MCP_ACCEPT,'content-type':'application/json','mcp-protocol-version':'2026-07-28','mcp-method':'tools/call','mcp-name':'kata_search_research'},body:{jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'request cancellation'},_meta:{'io.modelcontextprotocol/protocolVersion':'2026-07-28','io.modelcontextprotocol/clientCapabilities':{}}}}};
+  try{
+    setTimeout(()=>r.emit('close'),5);
+    await mcp(request,r);
+    assert.equal(observedSignal?.aborted,true);
+  }finally{globalThis.fetch=previousFetch;}
 });
 
 test('query parsing uses WHATWG URL without touching deprecated req.query compatibility layer',()=>{const req={url:'/api/search?query=machine%20learning&limit=2'};Object.defineProperty(req,'query',{get(){throw new Error('REQ_QUERY_ACCESSED');}});assert.equal(queryParam(req,'query'),'machine learning');assert.equal(queryParam(req,'limit'),'2');assert.equal(queryParam(req,'missing'),null);});
