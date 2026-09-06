@@ -25,6 +25,22 @@ test('MCP rejects malformed JSON-RPC requests before invoking tools',async()=>{
  assert.equal(invoked,0);
 });
 
+test('MCP reports failed tool receipts as tool execution errors visible to the model',async()=>{
+ const registry={
+  list:()=>[],
+  invoke:async()=>({workspace:{version:1},receipt:{status:'failed',error:'STALE_PREVIEW',processed:0}})
+ };
+ const response=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_run_automation'},
+  body:{jsonrpc:'2.0',id:30,method:'tools/call',params:{name:'kata_run_automation',arguments:{},_meta:modernMeta()}}
+ },{registry});
+ assert.equal(response.status,200);
+ assert.equal(response.body.error,undefined);
+ assert.equal(response.body.result.isError,true);
+ assert.equal(response.body.result.structuredContent.receipt.status,'failed');
+ assert.match(response.body.result.content[0].text,/STALE_PREVIEW/);
+});
+
 test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
