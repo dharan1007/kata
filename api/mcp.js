@@ -38,6 +38,12 @@ function acceptsMcpResponses(req){
   return accepted.has('application/json')&&accepted.has('text/event-stream');
 }
 
+function transportError(error){
+  if(error?.message==='PAYLOAD_TOO_LARGE')return{status:413,code:-32600,message:'Payload too large'};
+  if(error?.message==='INVALID_JSON')return{status:400,code:-32700,message:'Parse error'};
+  return{status:500,code:-32603,message:'Internal error'};
+}
+
 export default async function handler(req,res){
   const corsAllowed=applyCors(req,res);
   if(req.method==='OPTIONS'){
@@ -58,6 +64,7 @@ export default async function handler(req,res){
     if(out.body===undefined)return res.status(out.status).end();
     return send(res,out.status,out.body);
   }catch(error){
-    return send(res,error.status??400,{jsonrpc:'2.0',id:null,error:{code:-32700,message:error.message}});
+    const failure=transportError(error);
+    return send(res,failure.status,{jsonrpc:'2.0',id:null,error:{code:failure.code,message:failure.message}});
   }
 }
