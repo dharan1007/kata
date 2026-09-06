@@ -15,6 +15,19 @@ test('commands validate state and stay idempotent',()=>{
  assert.throws(()=>applyCommand(ws,{kind:'ADD_TAG',args:{workId:'W2',tag:'x'}}),/WORK_NOT_SAVED/);
 });
 
+test('workspace maps never treat inherited Object properties as work records',()=>{
+ const ws=createWorkspace();
+ assert.throws(()=>applyCommand(ws,{kind:'SAVE_WORK',args:{workId:'constructor'}}),/UNKNOWN_WORK/);
+});
+
+test('automation unsaved filtering ignores inherited Object properties',()=>{
+ const ws=createWorkspace();
+ const inheritedNameWork={id:'constructor',title:'Prototype-looking id',year:2026,citations:1,authors:[]};
+ const automation=createAutomation({name:'own-property filter',trigger:'MANUAL',filters:{onlyUnsaved:true},actions:[{kind:'SAVE_WORK'}]});
+ const preview=previewAutomation(automation,[inheritedNameWork],ws);
+ assert.deepEqual(preview.matches.map(work=>work.id),['constructor']);
+});
+
 test('compiler anti-unifies two typed demonstrations',()=>{
  const p=compileDemos('triage paper',[
   {kind:'SAVE_WORK',args:{workId:'W1'}},{kind:'ADD_TAG',args:{workId:'W1',tag:'agents'}}
