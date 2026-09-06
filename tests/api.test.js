@@ -57,4 +57,19 @@ test('/api/mcp rejects disallowed POST origins before media negotiation or body 
 
 test('/api/mcp reflects the allowed origin on actual MCP responses without using a wildcard',async()=>withMcpOrigins('https://agent.example',async()=>{const r=res();await mcp({method:'POST',headers:{accept:MCP_ACCEPT,origin:'https://agent.example','content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:{jsonrpc:'2.0',id:1,method:'ping',params:{}}},r);assert.equal(r.statusCode,200);assert.equal(r.headers['access-control-allow-origin'],'https://agent.example');assert.notEqual(r.headers['access-control-allow-origin'],'*');assert.equal(r.headers.vary,'Origin');}));
 
+test('/api/mcp sanitizes unexpected transport failures instead of exposing runtime details',async()=>{
+  const secret='socket reset by internal-proxy.prod.local while reading tenant_db';
+  const request={
+    method:'POST',
+    headers:{accept:MCP_ACCEPT,'content-type':'application/json','mcp-protocol-version':'2025-11-25'},
+    async *[Symbol.asyncIterator](){throw new Error(secret);}
+  };
+  const r=res();
+  await mcp(request,r);
+  assert.equal(r.statusCode,500);
+  assert.equal(r.body?.error?.code,-32603);
+  assert.equal(r.body?.error?.message,'Internal error');
+  assert.doesNotMatch(JSON.stringify(r.body),/internal-proxy|tenant_db|socket reset/i);
+});
+
 test('query parsing uses WHATWG URL without touching deprecated req.query compatibility layer',()=>{const req={url:'/api/search?query=machine%20learning&limit=2'};Object.defineProperty(req,'query',{get(){throw new Error('REQ_QUERY_ACCESSED');}});assert.equal(queryParam(req,'query'),'machine learning');assert.equal(queryParam(req,'limit'),'2');assert.equal(queryParam(req,'missing'),null);});
