@@ -14,6 +14,11 @@ function applyCors(req,res){
   return true;
 }
 
+function requestMediaType(req){
+  const raw=req.headers?.['content-type']??req.headers?.['Content-Type'];
+  return String(raw??'').split(';',1)[0].trim().toLowerCase();
+}
+
 export default async function handler(req,res){
   const corsAllowed=applyCors(req,res);
   if(req.method==='OPTIONS'){
@@ -24,6 +29,7 @@ export default async function handler(req,res){
     return res.status(204).end();
   }
   if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'},{Allow:'POST, OPTIONS'});
+  if(requestMediaType(req)!=='application/json')return send(res,415,{jsonrpc:'2.0',id:null,error:{code:-32600,message:'MCP POST requests require Content-Type: application/json'}});
   try{
     const body=await readJsonBody(req,262144);
     const out=await handleMcpRequest({headers:req.headers??{},body});
