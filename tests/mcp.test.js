@@ -58,6 +58,22 @@ test('MCP keeps thrown tool-handler failures in the tool result so agents can re
  assert.match(response.body.result.content[0].text,/UPSTREAM_RATE_LIMITED/);
 });
 
+test('MCP sanitizes unexpected tool crashes while keeping them model-visible',async()=>{
+ const registry={
+  list:()=>[],
+  invoke:async()=>{const error=new Error('postgres://admin:secret@db.internal/customer');error.details={sql:'select * from private_users'};throw error;}
+ };
+ const response=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'},
+  body:{jsonrpc:'2.0',id:32,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'agents'},_meta:modernMeta()}}
+ },{registry});
+ assert.equal(response.status,200);
+ assert.equal(response.body.result.isError,true);
+ assert.equal(response.body.result.structuredContent.error,'TOOL_EXECUTION_FAILED');
+ assert.equal(response.body.result.structuredContent.details,undefined);
+ assert.doesNotMatch(response.body.result.content[0].text,/secret|private_users|postgres/i);
+});
+
 test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
