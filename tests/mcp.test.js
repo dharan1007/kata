@@ -102,8 +102,10 @@ test('MCP 2026-07-28 requires a self-describing metadata envelope and matching v
  const missingCaps=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:21,method:'tools/list',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION}}}});
  assert.equal(missingCaps.status,400); assert.equal(missingCaps.body.error.code,-32600);
 
- const mismatch=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:22,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':'2026-01-01'})}}});
- assert.equal(mismatch.status,400); assert.equal(mismatch.body.error.code,-32600);
+ const requested='2026-01-01';
+ const unsupported=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:22,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':requested})}}});
+ assert.equal(unsupported.status,400); assert.equal(unsupported.body.error.code,-32022);
+ assert.deepEqual(unsupported.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
 });
 
 test('MCP 2025-11-25 clients can initialize, acknowledge, and use tools without 2026 routing headers',async()=>{
