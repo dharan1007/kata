@@ -11,6 +11,14 @@ test('OpenAlex retries one rate limit and normalizes real response shape',async(
  const out=await searchOpenAlex('x',1,{fetchImpl:fake,retryDelayMs:0}); assert.equal(n,2); assert.equal(out.works[0].id,'W1'); assert.equal(out.works[0].citations,7);
 });
 
+test('OpenAlex terminal rate limit preserves upstream retry guidance',async()=>{
+ const fake=async()=>new Response('{}',{status:429,headers:{'X-RateLimit-Reset':'43200'}});
+ await assert.rejects(
+  searchOpenAlex('rate limited',1,{fetchImpl:fake,retries:0}),
+  error=>error?.message==='UPSTREAM_RATE_LIMITED'&&error?.details?.retryAfterSeconds===43200
+ );
+});
+
 test('OpenAlex uses configured API key and exposes upstream rate-limit telemetry',async()=>{
  let seenAuthorization=null;
  const fake=async(_url,options={})=>{
