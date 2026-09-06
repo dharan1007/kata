@@ -12,6 +12,15 @@ test('developer MCP example is a self-describing 2026-07-28 request',()=>{
   assert.match(example,/io\.modelcontextprotocol\/clientCapabilities/);
 });
 
+test('README MCP request example includes the required Streamable HTTP Accept contract',()=>{
+  const readme=fs.readFileSync(new URL('../README.md',import.meta.url),'utf8');
+  const start=readme.indexOf('A valid tool call is:');
+  assert.notEqual(start,-1,'README MCP tool-call example must exist');
+  const example=readme.slice(start,start+900);
+  assert.match(example,/Content-Type: application\/json/);
+  assert.match(example,/Accept: application\/json, text\/event-stream/);
+});
+
 test('browser source uses document.modelContext and not deprecated navigator alias',()=>{const src=fs.readFileSync(new URL('../src/webmcp.js',import.meta.url),'utf8');assert.match(src,/document\?\.modelContext|document\.modelContext/);assert.doesNotMatch(src,/navigator\.modelContext/);});
 
 test('public api directory contains endpoint modules only',()=>{
