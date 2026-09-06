@@ -102,6 +102,7 @@ A valid tool call is:
 ```http
 POST /api/mcp
 Content-Type: application/json
+Accept: application/json, text/event-stream
 MCP-Protocol-Version: 2026-07-28
 Mcp-Method: tools/call
 Mcp-Name: kata_search_research
