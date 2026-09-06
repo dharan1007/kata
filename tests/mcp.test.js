@@ -41,6 +41,23 @@ test('MCP reports failed tool receipts as tool execution errors visible to the m
  assert.match(response.body.result.content[0].text,/STALE_PREVIEW/);
 });
 
+test('MCP keeps thrown tool-handler failures in the tool result so agents can recover',async()=>{
+ const registry={
+  list:()=>[],
+  invoke:async()=>{const error=new Error('UPSTREAM_RATE_LIMITED');error.details={retryAfterSeconds:12};throw error;}
+ };
+ const response=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'},
+  body:{jsonrpc:'2.0',id:31,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'agents'},_meta:modernMeta()}}
+ },{registry});
+ assert.equal(response.status,200);
+ assert.equal(response.body.error,undefined);
+ assert.equal(response.body.result.isError,true);
+ assert.equal(response.body.result.structuredContent.error,'UPSTREAM_RATE_LIMITED');
+ assert.deepEqual(response.body.result.structuredContent.details,{retryAfterSeconds:12});
+ assert.match(response.body.result.content[0].text,/UPSTREAM_RATE_LIMITED/);
+});
+
 test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
