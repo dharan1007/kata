@@ -26,6 +26,14 @@ test('/api/invoke rejects oversized/unexpected tool input cleanly',async()=>{con
 
 test('/api/mcp accepts legacy initialized notification with an empty 202 response',async()=>{const r=res();await mcp({method:'POST',headers:{'content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:{jsonrpc:'2.0',method:'notifications/initialized',params:{}}},r);assert.equal(r.statusCode,202);assert.equal(r.body,undefined);});
 
+test('/api/mcp requires clients to advertise both Streamable HTTP response media types',async()=>{
+  const request={method:'POST',headers:{'content-type':'application/json','mcp-protocol-version':'2025-11-25'},body:{jsonrpc:'2.0',id:1,method:'ping',params:{}}};
+  for(const accept of [undefined,'application/json','text/event-stream']){
+    const r=res();const headers={...request.headers};if(accept)headers.accept=accept;await mcp({...request,headers},r);assert.equal(r.statusCode,406);assert.equal(r.body?.error?.code,-32000);
+  }
+  const r=res();await mcp({...request,headers:{...request.headers,accept:'application/json, text/event-stream'}},r);assert.equal(r.statusCode,200);
+});
+
 test('/api/mcp allows an explicitly configured browser origin and emits usable CORS preflight headers',async()=>withMcpOrigins('https://agent.example, https://console.example',async()=>{const r=res();await mcp({method:'OPTIONS',headers:{origin:'https://agent.example'}},r);assert.equal(r.statusCode,204);assert.equal(r.headers['access-control-allow-origin'],'https://agent.example');assert.equal(r.headers.vary,'Origin');assert.match(r.headers['access-control-allow-methods'],/POST/);assert.match(r.headers['access-control-allow-headers'],/Authorization/);assert.equal(r.headers['access-control-max-age'],'600');}));
 
 test('/api/mcp refuses CORS preflight for origins outside the configured allowlist',async()=>withMcpOrigins('https://agent.example',async()=>{const r=res();await mcp({method:'OPTIONS',headers:{origin:'https://evil.example'}},r);assert.equal(r.statusCode,403);assert.equal(r.headers['access-control-allow-origin'],undefined);assert.equal(r.headers.vary,'Origin');assert.deepEqual(r.body,{error:'ORIGIN_NOT_ALLOWED'});}));
