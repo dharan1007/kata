@@ -21,7 +21,7 @@ test('README MCP request example includes the required Streamable HTTP Accept co
   assert.match(example,/Accept: application\/json, text\/event-stream/);
 });
 
-test('browser source uses document.modelContext and not deprecated navigator alias',()=>{const src=fs.readFileSync(new URL('../src/webmcp.js',import.meta.url),'utf8');assert.match(src,/document\?\.modelContext|document\.modelContext/);assert.doesNotMatch(src,/navigator\.modelContext/);});
+test('browser source prefers document.modelContext and retains the transitional navigator fallback',()=>{const src=fs.readFileSync(new URL('../src/webmcp.js',import.meta.url),'utf8');const documentIndex=src.indexOf('document?.modelContext');const navigatorIndex=src.indexOf('navigator?.modelContext');assert.notEqual(documentIndex,-1);assert.notEqual(navigatorIndex,-1);assert.ok(documentIndex<navigatorIndex,'document.modelContext must remain the canonical first choice');});
 
 test('public api directory contains endpoint modules only',()=>{
   const apiDir=new URL('../api/',import.meta.url);
