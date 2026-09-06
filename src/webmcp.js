@@ -1,4 +1,4 @@
-function getModelContext(runtime){return runtime.modelContext??globalThis.document?.modelContext??null;}
+function getModelContext(runtime){return runtime.modelContext??globalThis.document?.modelContext??globalThis.navigator?.modelContext??null;}
 function secureOrigins(values){
  const out=[];for(const raw of Array.isArray(values)?values:[]){try{const url=new URL(String(raw));if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)continue;const origin=url.origin;if(origin!=='null'&&!out.includes(origin))out.push(origin);}catch{}}
  return out;
