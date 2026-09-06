@@ -3,7 +3,7 @@ function isPotentiallyTrustworthyOrigin(url){
  const protocol=url.protocol.toLowerCase(),host=url.hostname.toLowerCase().replace(/\.$/,'');
  if(protocol==='https:')return true;
  if(protocol!=='http:')return false;
- if(host==='localhost'||host.endsWith('.localhost')||host==='[::1]'||host==='::1'||host.startsWith('127.'))return true;
+ if(host==='localhost'||host.endsWith('.localhost')||host==='[::1]'||host==='::1'||/^127(?:\.\d{1,3}){3}$/.test(host))return true;
  return false;
 }
 function secureOrigins(values){
