@@ -1,6 +1,13 @@
 function getModelContext(runtime){return runtime.modelContext??globalThis.document?.modelContext??globalThis.navigator?.modelContext??null;}
+function isPotentiallyTrustworthyOrigin(url){
+ const protocol=url.protocol.toLowerCase(),host=url.hostname.toLowerCase().replace(/\.$/,'');
+ if(protocol==='https:')return true;
+ if(protocol!=='http:')return false;
+ if(host==='localhost'||host.endsWith('.localhost')||host==='[::1]'||host==='::1'||/^127(?:\.\d{1,3}){3}$/.test(host))return true;
+ return false;
+}
 function secureOrigins(values){
- const out=[];for(const raw of Array.isArray(values)?values:[]){try{const url=new URL(String(raw));if(url.protocol!=='https:'||url.username||url.password||url.pathname!=='/'||url.search||url.hash)continue;const origin=url.origin;if(origin!=='null'&&!out.includes(origin))out.push(origin);}catch{}}
+ const out=[];for(const raw of Array.isArray(values)?values:[]){try{const url=new URL(String(raw));if(!isPotentiallyTrustworthyOrigin(url)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)continue;const origin=url.origin;if(origin!=='null'&&!out.includes(origin))out.push(origin);}catch{}}
  return out;
 }
 function exposureConfig(runtime){

@@ -29,19 +29,20 @@ test('WebMCP forwards invocation AbortSignal to network-backed runtime operation
  registry.dispose();
 });
 
-test('WebMCP cross-origin exposure is explicit, secure-origin-only, and never wildcarded',async()=>{
+test('WebMCP cross-origin exposure accepts potentially trustworthy local development origins without allowing insecure remote HTTP',async()=>{
  const calls=[];const mc={async registerTool(tool,options){calls.push({tool,options});}};
  const runtime={
   modelContext:mc,
-  webMcpExposedTo:['https://agent.example','https://partner.example/','http://insecure.example','*','not-a-url'],
+  webMcpExposedTo:['https://agent.example','https://partner.example/','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173','http://insecure.example','http://127.example','*','not-a-url'],
   search:async()=>({}),summary:()=>({}),listAutomations:()=>[],runAutomation:async()=>({}),listPrograms:()=>[],executeProgram:async()=>({})
  };
  const registry=createWebMcpRegistry(runtime);await registry.refresh();
  assert.ok(calls.length>=5);
  for(const call of calls){
-  assert.deepEqual(call.options.exposedTo,['https://agent.example','https://partner.example']);
+  assert.deepEqual(call.options.exposedTo,['https://agent.example','https://partner.example','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173']);
   assert.equal(call.options.exposedTo.includes('*'),false);
-  assert.equal(call.options.exposedTo.some(origin=>origin.startsWith('http://')),false);
+  assert.equal(call.options.exposedTo.includes('http://insecure.example'),false);
+  assert.equal(call.options.exposedTo.includes('http://127.example'),false);
  }
  registry.dispose();
 });
