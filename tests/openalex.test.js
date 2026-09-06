@@ -6,9 +6,13 @@ test('OpenAlex URL uses WHATWG URL and clamps result limits',()=>{
  const u=buildOpenAlexUrl('web agents',999); assert.equal(u.searchParams.get('search'),'web agents'); assert.equal(u.searchParams.get('per-page'),'25');
 });
 
-test('OpenAlex retries one rate limit and normalizes real response shape',async()=>{
- let n=0; const fake=async()=>{n++; if(n===1)return new Response('{}',{status:429}); return Response.json({results:[{id:'https://openalex.org/W1',title:'X',publication_year:2026,cited_by_count:7,authorships:[{author:{display_name:'A'}}],doi:'https://doi.org/10.x'}]});};
- const out=await searchOpenAlex('x',1,{fetchImpl:fake,retryDelayMs:0}); assert.equal(n,2); assert.equal(out.works[0].id,'W1'); assert.equal(out.works[0].citations,7);
+test('OpenAlex does not hammer the upstream after an explicit rate limit',async()=>{
+ let n=0; const fake=async()=>{n++; if(n===1)return new Response('{}',{status:429,headers:{'X-RateLimit-Reset':'45'}}); return Response.json({results:[{id:'https://openalex.org/W1',title:'X',publication_year:2026,cited_by_count:7,authorships:[{author:{display_name:'A'}}],doi:'https://doi.org/10.x'}]});};
+ await assert.rejects(
+  searchOpenAlex('x',1,{fetchImpl:fake,retryDelayMs:0}),
+  error=>error?.message==='UPSTREAM_RATE_LIMITED'&&error?.details?.retryAfterSeconds===45
+ );
+ assert.equal(n,1);
 });
 
 test('OpenAlex terminal rate limit preserves upstream retry guidance',async()=>{
