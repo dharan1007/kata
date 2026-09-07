@@ -11,10 +11,16 @@ export const REQUIRED_DEPLOYMENT_ROUTES=Object.freeze([
 ]);
 
 const SHA_RE=/^[0-9a-f]{40}$/i;
+const SHA256_RE=/^[0-9a-f]{64}$/i;
 
 function validSha(value){
   const normalized=value?.trim();
   return normalized&&SHA_RE.test(normalized)?normalized.toLowerCase():null;
+}
+
+function validSha256(value){
+  const normalized=value?.trim();
+  return normalized&&SHA256_RE.test(normalized)?normalized.toLowerCase():null;
 }
 
 export function resolveSourceIdentity(env=process.env){
@@ -66,14 +72,23 @@ export function resolveSourceSha(env=process.env){
   return resolveSourceIdentity(env).sha;
 }
 
-export function createReleaseContract(env=process.env){
+export function createReleaseContract(env=process.env,evidence={}){
   const source=resolveSourceIdentity(env);
+  const integritySha256=validSha256(evidence.integritySha256);
+  const integrityBytes=Number.isSafeInteger(evidence.integrityBytes)&&evidence.integrityBytes>0?evidence.integrityBytes:null;
   return {
-    schemaVersion:1,
+    schemaVersion:2,
     service:'kata-webmcp',
     version:'3.0.0',
     source,
     runtime:{node:'24.x'},
+    evidence:{
+      integrity:{
+        path:'/integrity.json',
+        sha256:integritySha256,
+        bytes:integrityBytes
+      }
+    },
     deployment:{requiredRoutes:REQUIRED_DEPLOYMENT_ROUTES}
   };
 }

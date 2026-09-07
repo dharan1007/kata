@@ -59,3 +59,23 @@ test('release contract requires the deployed provenance and integrity evidence e
     assert.ok(routes.has(route),`missing ${route}`);
   }
 });
+
+test('release contract cryptographically binds the integrity manifest evidence',()=>{
+  const sha256='F'.repeat(64);
+  const contract=createReleaseContract({GITHUB_SHA:'A'.repeat(40)},{integritySha256:sha256,integrityBytes:4096});
+  assert.equal(contract.schemaVersion,2);
+  assert.deepEqual(contract.evidence.integrity,{
+    path:'/integrity.json',
+    sha256:sha256.toLowerCase(),
+    bytes:4096
+  });
+});
+
+test('release contract refuses malformed integrity evidence',()=>{
+  const contract=createReleaseContract({}, {integritySha256:'not-a-digest',integrityBytes:-1});
+  assert.deepEqual(contract.evidence.integrity,{
+    path:'/integrity.json',
+    sha256:null,
+    bytes:null
+  });
+});

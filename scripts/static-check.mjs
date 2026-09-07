@@ -20,7 +20,8 @@ const expected=['/dashboard','/research','/automations','/teach','/tools','/deve
 const rewrites=new Set(config.rewrites.map(x=>x.source));
 for(const r of expected)if(!rewrites.has(r))throw new Error(`Missing product rewrite ${r}`);
 
-const manifest=JSON.parse(fs.readFileSync(path.join(root,'dist/integrity.json'),'utf8'));
+const integrityBytes=fs.readFileSync(path.join(root,'dist/integrity.json'));
+const manifest=JSON.parse(integrityBytes.toString('utf8'));
 for(const [rel,meta] of Object.entries(manifest.assets)){
   const b=fs.readFileSync(path.join(root,'dist',rel.slice(1)));
   const sha=createHash('sha256').update(b).digest('hex');
@@ -28,9 +29,14 @@ for(const [rel,meta] of Object.entries(manifest.assets)){
 }
 
 const release=JSON.parse(fs.readFileSync(path.join(root,'dist/release.json'),'utf8'));
-if(release.schemaVersion!==1||release.service!=='kata-webmcp'||release.version!=='3.0.0')throw new Error('Invalid release provenance contract');
+if(release.schemaVersion!==2||release.service!=='kata-webmcp'||release.version!=='3.0.0')throw new Error('Invalid release provenance contract');
 const required=new Set((release.deployment?.requiredRoutes??[]).map(x=>`${x.method} ${x.path}`));
-for(const route of ['GET /','GET /api/health','GET /api/capabilities','GET /api/agents','GET /api/openapi','POST /api/invoke','POST /api/mcp'])if(!required.has(route))throw new Error(`Release contract missing ${route}`);
+for(const route of ['GET /','GET /release.json','GET /integrity.json','GET /api/health','GET /api/capabilities','GET /api/agents','GET /api/openapi','POST /api/invoke','POST /api/mcp'])if(!required.has(route))throw new Error(`Release contract missing ${route}`);
 if(process.env.GITHUB_SHA&&release.source?.sha!==process.env.GITHUB_SHA.toLowerCase())throw new Error('Release source SHA does not match GITHUB_SHA');
+const integrityEvidence=release.evidence?.integrity;
+const manifestSha256=createHash('sha256').update(integrityBytes).digest('hex');
+if(integrityEvidence?.path!=='/integrity.json')throw new Error('Release contract integrity path mismatch');
+if(integrityEvidence?.sha256!==manifestSha256)throw new Error('Release contract does not bind the emitted integrity manifest');
+if(integrityEvidence?.bytes!==integrityBytes.length)throw new Error('Release contract integrity byte count mismatch');
 
-console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, source provenance ${release.source?.provenance}.`);
+console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, source provenance ${release.source?.provenance}, integrity evidence bound.`);

@@ -36,7 +36,7 @@ jobs:
           test -f dist/src/webmcp.js
           test -f dist/integrity.json
           test -f dist/release.json
-          node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('dist/release.json','utf8')); if(r.source?.sha !== process.env.GITHUB_SHA.toLowerCase()) throw new Error('release.json is not bound to checked-out GITHUB_SHA'); if(r.source?.provenance !== 'source-bound') throw new Error('release.json has unverified provenance');"
+          node --input-type=module -e "import fs from 'node:fs'; import {createHash} from 'node:crypto'; const r=JSON.parse(fs.readFileSync('dist/release.json','utf8')); const integrity=fs.readFileSync('dist/integrity.json'); const digest=createHash('sha256').update(integrity).digest('hex'); if(r.source?.sha !== process.env.GITHUB_SHA.toLowerCase()) throw new Error('release.json is not bound to checked-out GITHUB_SHA'); if(r.source?.provenance !== 'source-bound') throw new Error('release.json has unverified provenance'); if(r.evidence?.integrity?.path !== '/integrity.json' || r.evidence?.integrity?.sha256 !== digest || r.evidence?.integrity?.bytes !== integrity.length) throw new Error('release.json is not bound to emitted integrity.json');"
       - name: Upload verified release bundle
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
