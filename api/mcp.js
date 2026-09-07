@@ -53,7 +53,7 @@ function protocolHeader(req){
 
 function transportErrorBody(req,failure){
   const error={code:failure.code,message:failure.message};
-  if(protocolHeader(req)!==LEGACY_MCP_VERSION){
+  if(protocolHeader(req)===MCP_VERSION){
     error._meta={[SERVER_INFO_META]:SERVER_INFO};
   }
   return{jsonrpc:'2.0',id:null,error};
