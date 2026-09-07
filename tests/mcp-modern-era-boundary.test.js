@@ -33,3 +33,25 @@ test('explicit 2026-07-28 requests cannot enter the legacy initialize handshake'
   assert.equal(response.body.result,undefined);
   assert.equal(response.body.error._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
 });
+
+test('malformed explicit 2026-07-28 initialize requests keep the modern error envelope',async()=>{
+  const response=await handleMcpRequest({
+    headers:{'mcp-protocol-version':MCP_VERSION},
+    body:{
+      jsonrpc:'2.0',
+      id:null,
+      method:'initialize',
+      params:{
+        protocolVersion:LEGACY_MCP_VERSION,
+        capabilities:{},
+        clientInfo:{name:'legacy-shaped-client',version:'1.0.0'},
+        _meta:modernMeta()
+      }
+    }
+  });
+
+  assert.equal(response.status,400);
+  assert.equal(response.body.error.code,-32600);
+  assert.match(response.body.error.message,/must not be null/i);
+  assert.equal(response.body.error._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
+});
