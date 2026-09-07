@@ -18,7 +18,9 @@ for(const rel of assets){
   integrity.assets[`/${rel}`]={sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length};
 }
 
-const release=createReleaseContract();
-await fs.writeFile(path.join(out,'integrity.json'),JSON.stringify(integrity,null,2));
+const integrityBytes=Buffer.from(JSON.stringify(integrity,null,2));
+const integritySha256=createHash('sha256').update(integrityBytes).digest('hex');
+const release=createReleaseContract(process.env,{integritySha256,integrityBytes:integrityBytes.length});
+await fs.writeFile(path.join(out,'integrity.json'),integrityBytes);
 await fs.writeFile(path.join(out,'release.json'),JSON.stringify(release,null,2));
-console.log(`Built ${assets.length} canonical static assets with SHA-256 integrity manifest and release provenance contract (${release.source.provenance}).`);
+console.log(`Built ${assets.length} canonical static assets with SHA-256 integrity manifest and release provenance contract (${release.source.provenance}, integrity-bound).`);
