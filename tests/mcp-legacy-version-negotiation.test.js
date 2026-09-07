@@ -22,3 +22,20 @@ test('legacy initialize counter-offers the latest supported handshake version',a
   assert.equal(response.body.result.protocolVersion,LEGACY_MCP_VERSION);
   assert.equal(response.body.result.serverInfo.name,'kata-webmcp');
 });
+
+test('legacy initialize rejects missing required client handshake fields',async()=>{
+  const response=await handleMcpRequest({
+    headers:{},
+    body:{
+      jsonrpc:'2.0',
+      id:2,
+      method:'initialize',
+      params:{protocolVersion:LEGACY_MCP_VERSION}
+    }
+  });
+
+  assert.equal(response.status,400);
+  assert.equal(response.body.result,undefined);
+  assert.equal(response.body.error.code,-32602);
+  assert.equal(response.body.error.message,'Invalid params');
+});
