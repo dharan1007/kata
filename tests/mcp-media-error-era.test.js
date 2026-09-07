@@ -5,7 +5,9 @@ import mcp from '../api/mcp.js';
 function res(){return{statusCode:200,headers:{},body:null,status(n){this.statusCode=n;return this;},setHeader(k,v){this.headers[k.toLowerCase()]=v;},json(v){this.body=v;return this;},end(v){this.body=v;return this;}};}
 
 function request(protocol,headers={}){
-  return {method:'POST',headers:{'mcp-protocol-version':protocol,...headers},body:{jsonrpc:'2.0',id:1,method:'ping',params:{}}};
+  const out={method:'POST',headers:{...headers},body:{jsonrpc:'2.0',id:1,method:'ping',params:{}}};
+  if(protocol!==undefined)out.headers['mcp-protocol-version']=protocol;
+  return out;
 }
 
 function assertEra(response,{status,code,modern}){
@@ -33,4 +35,14 @@ test('MCP 406 Accept errors preserve the explicitly declared protocol era',async
   const legacy=res();
   await mcp(request('2025-11-25',{'content-type':'application/json',accept:'application/json'}),legacy);
   assertEra(legacy,{status:406,code:-32000,modern:false});
+});
+
+test('headerless pre-2026 clients keep legacy-shaped media errors',async()=>{
+  const unsupportedMedia=res();
+  await mcp(request(undefined,{accept:'application/json, text/event-stream','content-type':'text/plain'}),unsupportedMedia);
+  assertEra(unsupportedMedia,{status:415,code:-32600,modern:false});
+
+  const unacceptable=res();
+  await mcp(request(undefined,{'content-type':'application/json',accept:'application/json'}),unacceptable);
+  assertEra(unacceptable,{status:406,code:-32000,modern:false});
 });
