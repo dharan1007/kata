@@ -45,6 +45,8 @@ function transportError(error){
 }
 
 function requestCancellation(req,res){
+  const protocol=req.headers?.['mcp-protocol-version']??req.headers?.['MCP-Protocol-Version'];
+  if(protocol!=='2026-07-28')return{signal:undefined,cleanup(){}};
   const controller=new AbortController();
   const abort=()=>{if(!controller.signal.aborted)controller.abort(new Error('CLIENT_DISCONNECTED'));};
   const close=()=>{if(!res.writableEnded)abort();};
