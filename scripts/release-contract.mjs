@@ -10,26 +10,67 @@ export const REQUIRED_DEPLOYMENT_ROUTES=Object.freeze([
 
 const SHA_RE=/^[0-9a-f]{40}$/i;
 
-export function resolveSourceSha(env=process.env){
-  for(const key of ['KATA_SOURCE_SHA','GITHUB_SHA','VERCEL_GIT_COMMIT_SHA']){
-    const value=env[key]?.trim();
-    if(value&&SHA_RE.test(value))return value.toLowerCase();
+function validSha(value){
+  const normalized=value?.trim();
+  return normalized&&SHA_RE.test(normalized)?normalized.toLowerCase():null;
+}
+
+export function resolveSourceIdentity(env=process.env){
+  const githubSha=validSha(env.GITHUB_SHA);
+  if(githubSha){
+    return {
+      sha:githubSha,
+      provenance:'source-bound',
+      authority:'github-actions',
+      repository:env.GITHUB_REPOSITORY?.trim()||null,
+      ref:env.GITHUB_REF?.trim()||null
+    };
   }
-  return null;
+
+  const vercelSha=validSha(env.VERCEL_GIT_COMMIT_SHA);
+  if(vercelSha){
+    const owner=env.VERCEL_GIT_REPO_OWNER?.trim();
+    const slug=env.VERCEL_GIT_REPO_SLUG?.trim();
+    return {
+      sha:vercelSha,
+      provenance:'source-bound',
+      authority:'vercel-git',
+      repository:owner&&slug?`${owner}/${slug}`:null,
+      ref:env.VERCEL_GIT_COMMIT_REF?.trim()||null
+    };
+  }
+
+  const explicitSha=validSha(env.KATA_SOURCE_SHA);
+  if(explicitSha){
+    return {
+      sha:explicitSha,
+      provenance:'asserted',
+      authority:'explicit',
+      repository:env.GITHUB_REPOSITORY?.trim()||null,
+      ref:env.GITHUB_REF?.trim()||env.VERCEL_GIT_COMMIT_REF?.trim()||null
+    };
+  }
+
+  return {
+    sha:null,
+    provenance:'unverified',
+    authority:'none',
+    repository:null,
+    ref:null
+  };
+}
+
+export function resolveSourceSha(env=process.env){
+  return resolveSourceIdentity(env).sha;
 }
 
 export function createReleaseContract(env=process.env){
-  const sha=resolveSourceSha(env);
+  const source=resolveSourceIdentity(env);
   return {
     schemaVersion:1,
     service:'kata-webmcp',
     version:'3.0.0',
-    source:{
-      sha,
-      repository:env.GITHUB_REPOSITORY?.trim()||null,
-      ref:env.GITHUB_REF?.trim()||env.VERCEL_GIT_COMMIT_REF?.trim()||null,
-      provenance:sha?'source-bound':'unverified'
-    },
+    source,
     runtime:{node:'24.x'},
     deployment:{requiredRoutes:REQUIRED_DEPLOYMENT_ROUTES}
   };
