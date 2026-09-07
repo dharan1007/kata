@@ -1,5 +1,8 @@
 import {readJsonBody,send} from '../lib/server/http.js';
-import {handleMcpRequest} from '../lib/server/mcp.js';
+import {handleMcpRequest,MCP_VERSION,LEGACY_MCP_VERSION} from '../lib/server/mcp.js';
+
+const SERVER_INFO={name:'kata-webmcp',version:'3.0.0'};
+const SERVER_INFO_META='io.modelcontextprotocol/serverInfo';
 
 function allowedOrigins(){
   return String(process.env.MCP_ALLOWED_ORIGINS??'').split(',').map(x=>x.trim()).filter(Boolean);
@@ -44,9 +47,21 @@ function transportError(error){
   return{status:500,code:-32603,message:'Internal error'};
 }
 
+function protocolHeader(req){
+  return req.headers?.['mcp-protocol-version']??req.headers?.['MCP-Protocol-Version'];
+}
+
+function transportErrorBody(req,failure){
+  const error={code:failure.code,message:failure.message};
+  if(protocolHeader(req)!==LEGACY_MCP_VERSION){
+    error._meta={[SERVER_INFO_META]:SERVER_INFO};
+  }
+  return{jsonrpc:'2.0',id:null,error};
+}
+
 function requestCancellation(req,res){
-  const protocol=req.headers?.['mcp-protocol-version']??req.headers?.['MCP-Protocol-Version'];
-  if(protocol!=='2026-07-28')return{signal:undefined,cleanup(){}};
+  const protocol=protocolHeader(req);
+  if(protocol!==MCP_VERSION)return{signal:undefined,cleanup(){}};
   const controller=new AbortController();
   const abort=()=>{if(!controller.signal.aborted)controller.abort(new Error('CLIENT_DISCONNECTED'));};
   const close=()=>{if(!res.writableEnded)abort();};
@@ -77,7 +92,7 @@ export default async function handler(req,res){
     return send(res,out.status,out.body);
   }catch(error){
     const failure=transportError(error);
-    return send(res,failure.status,{jsonrpc:'2.0',id:null,error:{code:failure.code,message:failure.message}});
+    return send(res,failure.status,transportErrorBody(req,failure));
   }finally{
     cancellation.cleanup();
   }
