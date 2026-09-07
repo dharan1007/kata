@@ -52,3 +52,10 @@ test('release contract carries the minimum production interoperability route sur
     assert.ok(routes.has(route),`missing ${route}`);
   }
 });
+
+test('release contract requires the deployed provenance and integrity evidence endpoints',()=>{
+  const routes=new Set(REQUIRED_DEPLOYMENT_ROUTES.map(({method,path})=>`${method} ${path}`));
+  for(const route of ['GET /release.json','GET /integrity.json']){
+    assert.ok(routes.has(route),`missing ${route}`);
+  }
+});
