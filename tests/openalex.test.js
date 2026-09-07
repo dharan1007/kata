@@ -47,3 +47,13 @@ test('OpenAlex retries transient failures with exponential backoff',async()=>{
  assert.deepEqual(delays,[100,200,400]);
  assert.equal(out.meta.source,'openalex');
 });
+
+test('OpenAlex cancellation interrupts retry backoff before another upstream request',async()=>{
+ const controller=new AbortController(); let attempts=0;
+ const fake=async()=>{attempts++; if(attempts===1){queueMicrotask(()=>controller.abort()); return new Response('{}',{status:503});} return Response.json({results:[]});};
+ await assert.rejects(
+  searchOpenAlex('cancel backoff',1,{fetchImpl:fake,retries:1,retryDelayMs:10,signal:controller.signal}),
+  error=>error?.message==='REQUEST_CANCELLED'
+ );
+ assert.equal(attempts,1);
+});
