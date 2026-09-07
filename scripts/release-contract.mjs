@@ -1,5 +1,7 @@
 export const REQUIRED_DEPLOYMENT_ROUTES=Object.freeze([
   Object.freeze({method:'GET',path:'/',purpose:'application shell'}),
+  Object.freeze({method:'GET',path:'/release.json',purpose:'deployed source provenance and promotion contract'}),
+  Object.freeze({method:'GET',path:'/integrity.json',purpose:'deployed static asset integrity manifest'}),
   Object.freeze({method:'GET',path:'/api/health',purpose:'service health'}),
   Object.freeze({method:'GET',path:'/api/capabilities',purpose:'canonical interoperability capabilities'}),
   Object.freeze({method:'GET',path:'/api/agents',purpose:'agent bridge schemas'}),
