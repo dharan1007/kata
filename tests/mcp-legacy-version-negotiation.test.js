@@ -27,6 +27,7 @@ test('legacy initialize rejects missing or malformed required client handshake f
   const invalidParams=[
     {protocolVersion:LEGACY_MCP_VERSION},
     {protocolVersion:LEGACY_MCP_VERSION,capabilities:[],clientInfo:{name:'client',version:'1.0.0'}},
+    {protocolVersion:LEGACY_MCP_VERSION,capabilities:{},clientInfo:[]},
     {protocolVersion:LEGACY_MCP_VERSION,capabilities:{},clientInfo:{name:'client'}},
     {protocolVersion:'',capabilities:{},clientInfo:{name:'client',version:'1.0.0'}}
   ];
