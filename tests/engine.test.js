@@ -20,6 +20,16 @@ test('workspace maps never treat inherited Object properties as work records',()
  assert.throws(()=>applyCommand(ws,{kind:'SAVE_WORK',args:{workId:'constructor'}}),/UNKNOWN_WORK/);
 });
 
+test('workspace map writes preserve __proto__ as an ordinary external work id',()=>{
+ const ws=createWorkspace();
+ const work={id:'__proto__',title:'Prototype id',year:2026,citations:1,authors:[]};
+ Object.defineProperty(ws.knownWorks,'__proto__',{value:work,enumerable:true,writable:true,configurable:true});
+ const next=applyCommand(ws,{kind:'SAVE_WORK',args:{workId:'__proto__'}});
+ assert.equal(Object.hasOwn(next.savedWorks,'__proto__'),true);
+ assert.equal(next.savedWorks.__proto__.id,'__proto__');
+ assert.equal(Object.getPrototypeOf(next.savedWorks),Object.prototype);
+});
+
 test('automation unsaved filtering ignores inherited Object properties',()=>{
  const ws=createWorkspace();
  const inheritedNameWork={id:'constructor',title:'Prototype-looking id',year:2026,citations:1,authors:[]};
