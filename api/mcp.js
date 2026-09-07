@@ -81,8 +81,8 @@ export default async function handler(req,res){
   }
   if(!corsAllowed)return send(res,403,{error:'ORIGIN_NOT_ALLOWED'},{Vary:'Origin'});
   if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'},{Allow:'POST, OPTIONS'});
-  if(requestMediaType(req)!=='application/json')return send(res,415,{jsonrpc:'2.0',id:null,error:{code:-32600,message:'MCP POST requests require Content-Type: application/json'}});
-  if(!acceptsMcpResponses(req))return send(res,406,{jsonrpc:'2.0',id:null,error:{code:-32000,message:'Not Acceptable: MCP clients must accept both application/json and text/event-stream'}});
+  if(requestMediaType(req)!=='application/json')return send(res,415,transportErrorBody(req,{code:-32600,message:'MCP POST requests require Content-Type: application/json'}));
+  if(!acceptsMcpResponses(req))return send(res,406,transportErrorBody(req,{code:-32000,message:'Not Acceptable: MCP clients must accept both application/json and text/event-stream'}));
   const cancellation=requestCancellation(req,res);
   try{
     const body=await readJsonBody(req,262144);
