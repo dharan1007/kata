@@ -38,10 +38,18 @@ test('authentication and bot controls never produce a bypass recommendation',asy
   assert.match(guidance,/user-authorized|documented api/);
 });
 
-test('CORS-blocked browser API prefers a legitimate server-side documented API path when available',async()=>{
+test('CORS-blocked browser API does not downgrade a viable server-side documented API',async()=>{
   const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'blocked',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
-  assert.equal(result.status,'setup_required');
+  assert.equal(result.status,'possible');
   assert.equal(result.primaryPath,'server_api');
   assert.ok(result.blockers.some(x=>x.code==='CORS_BLOCKED'));
+  assert.match(result.recommendedAction,/server-side|server side/i);
+});
+
+test('CSP connect-src blocked browser API does not downgrade a viable server-side documented API',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'allowed',cspConnect:'blocked',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='CSP_CONNECT_BLOCKED'));
   assert.match(result.recommendedAction,/server-side|server side/i);
 });
