@@ -21,7 +21,7 @@ const mcpMetaSchema={
 };
 const mcpRequestSchema={
   type:'object',
-  description:`JSON-RPC 2.0 MCP request. Every ${MCP_VERSION} POST, including notifications, must carry MCP-Protocol-Version and body-matched Mcp-Method headers plus the modern _meta envelope.`,
+  description:`JSON-RPC 2.0 MCP request. ${MCP_VERSION} request/response calls are stateless and self-describing; notifications may omit routing headers but still carry the modern _meta envelope.`,
   properties:{
     jsonrpc:{type:'string',const:'2.0'},
     id:jsonRpcId,
@@ -43,14 +43,14 @@ const mcpResponseSchema={
   additionalProperties:true
 };
 const mcpHeaders=[
-  {in:'header',name:'MCP-Protocol-Version',required:false,description:`Required on every ${MCP_VERSION} POST, including notifications, and must match request _meta. Also used by ${LEGACY_MCP_VERSION} compatibility traffic.`,schema:{type:'string',enum:[MCP_VERSION,LEGACY_MCP_VERSION]}},
-  {in:'header',name:'Mcp-Method',required:false,description:`Required and body-matched on every ${MCP_VERSION} request, including notifications.`,schema:{type:'string'}},
-  {in:'header',name:'Mcp-Name',required:false,description:`Required for ${MCP_VERSION} tools/call requests and must match params.name.`,schema:{type:'string'}}
+  {in:'header',name:'MCP-Protocol-Version',required:false,description:`Protocol revision. Required for ${MCP_VERSION} request/response calls, optional for modern notifications, and used by ${LEGACY_MCP_VERSION} compatibility traffic.`,schema:{type:'string',enum:[MCP_VERSION,LEGACY_MCP_VERSION]}},
+  {in:'header',name:'Mcp-Method',required:false,description:`Routing method. Required and body-matched for ${MCP_VERSION} request/response calls; not required for modern notification POSTs.`,schema:{type:'string'}},
+  {in:'header',name:'Mcp-Name',required:false,description:`Tool routing name for ${MCP_VERSION} tools/call requests. When present it must match params.name.`,schema:{type:'string'}}
 ];
 const mcpResponses={
   200:{description:'JSON-RPC response for request/response calls',content:{'application/json':{schema:mcpResponseSchema}}},
-  202:{description:'Accepted MCP notification after required modern routing-header validation; no JSON-RPC response body'},
-  400:{description:'Invalid JSON-RPC envelope, MCP metadata, missing or mismatched required routing header, or unsupported protocol request',content:{'application/json':{schema:mcpResponseSchema}}},
+  202:{description:'Accepted MCP notification; no JSON-RPC response body'},
+  400:{description:'Invalid JSON-RPC envelope, MCP metadata, routing header/body mismatch, or unsupported protocol request',content:{'application/json':{schema:mcpResponseSchema}}},
   401:{description:'Bearer authentication required or invalid when MCP_BEARER_TOKEN is configured'},
   403:{description:'Origin rejected by the configured MCP origin allowlist'},
   406:{description:'Accept must permit both application/json and text/event-stream for Streamable HTTP request/response calls'},
@@ -73,7 +73,7 @@ const schema={
     '/api/compile':{post:{operationId:'compileKataWorkflow',summary:'Compile two semantic demonstrations',responses:{200:{description:'Compiled program'}}}},
     '/api/execute':{post:{operationId:'executeKataProgram',summary:'Execute a deterministic compiled program',responses:{200:{description:'Next workspace snapshot'}}}},
     '/api/agents':{get:{operationId:'getKataAgentSchemas',summary:'KATA, OpenAI, Anthropic and Gemini tool definitions',responses:{200:{description:'Agent schemas'}}}},
-    '/api/mcp':{post:{operationId:'callKataMcp',summary:`MCP ${MCP_VERSION} / ${LEGACY_MCP_VERSION} Streamable HTTP endpoint`,description:`Content-Type is application/json. Every ${MCP_VERSION} POST, including notifications, requires MCP-Protocol-Version and Mcp-Method. Request/response calls must advertise both application/json and text/event-stream in Accept; accepted notifications return HTTP 202 without a JSON-RPC body.`,parameters:mcpHeaders,requestBody:jsonRequest(mcpRequestSchema),responses:mcpResponses}}
+    '/api/mcp':{post:{operationId:'callKataMcp',summary:`MCP ${MCP_VERSION} / ${LEGACY_MCP_VERSION} Streamable HTTP endpoint`,description:'Content-Type is application/json. Request/response calls must advertise both application/json and text/event-stream in Accept; accepted notifications return HTTP 202 without a JSON-RPC body.',parameters:mcpHeaders,requestBody:jsonRequest(mcpRequestSchema),responses:mcpResponses}}
   }
 };
 

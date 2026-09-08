@@ -19,8 +19,6 @@ test('/api/openapi publishes the modern MCP transport contract',async()=>{
   assert.equal(parameters['Mcp-Method'].in,'header');
   assert.equal(parameters['Mcp-Method'].required,false);
   assert.equal(parameters['Mcp-Name'].required,false);
-  assert.match(parameters['MCP-Protocol-Version'].description,/every .* POST, including notifications/);
-  assert.match(parameters['Mcp-Method'].description,/every .* request, including notifications/);
 
   const requestMedia=operation.requestBody.content;
   assert.ok(requestMedia['application/json']);
@@ -32,7 +30,7 @@ test('/api/openapi publishes the modern MCP transport contract',async()=>{
 
   assert.equal(operation.responses['200'].description,'JSON-RPC response for request/response calls');
   assert.ok(operation.responses['200'].content['application/json']);
-  assert.match(operation.responses['202'].description,/required modern routing-header validation/);
+  assert.equal(operation.responses['202'].description,'Accepted MCP notification; no JSON-RPC response body');
   assert.ok(operation.responses['400']);
   assert.ok(operation.responses['401']);
   assert.ok(operation.responses['403']);
