@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security policy
+    url: https://github.com/dharan1007/kata/security/policy
+    about: Do not disclose authentication, origin-control, state-integrity or injection vulnerabilities publicly.
+  - name: Live capabilities
+    url: https://kata-webmcp.vercel.app/api/capabilities
+    about: Inspect the currently deployed machine-readable protocol/capability contract.
