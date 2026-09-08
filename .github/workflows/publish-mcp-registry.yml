@@ -96,7 +96,8 @@ jobs:
             --data-urlencode "search=$name" \
             --max-time 20 \
             "$REGISTRY_URL/v0.1/servers")"
-          if python - "$name" "$version" "$response" <<'PY'
+          set +e
+          python - "$name" "$version" "$response" <<'PY'
           import json, sys
           name, version, raw = sys.argv[1:]
           expected = json.load(open('server.json'))
@@ -107,19 +108,18 @@ jobs:
                   immutable_fields = ('name', 'title', 'description', 'version', 'repository', 'remotes')
                   mismatches = [field for field in immutable_fields if server.get(field) != expected.get(field)]
                   if mismatches:
-                      raise SystemExit(f"Registry entry exists but immutable metadata differs: {', '.join(mismatches)}")
+                      print(f"Registry entry exists but immutable metadata differs: {', '.join(mismatches)}", file=sys.stderr)
+                      raise SystemExit(2)
                   raise SystemExit(0)
           raise SystemExit(1)
           PY
-          then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            status=$?
-            if [ "$status" -ne 1 ]; then
-              exit "$status"
-            fi
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "exists=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
 
       - name: Install pinned MCP Registry publisher
         if: steps.registry.outputs.exists != 'true'
@@ -167,7 +167,8 @@ jobs:
                   immutable_fields = ('name', 'title', 'description', 'version', 'repository', 'remotes')
                   mismatches = [field for field in immutable_fields if server.get(field) != expected.get(field)]
                   if mismatches:
-                      raise SystemExit(f"Registry entry exists but immutable metadata differs: {', '.join(mismatches)}")
+                      print(f"Registry entry exists but immutable metadata differs: {', '.join(mismatches)}", file=sys.stderr)
+                      raise SystemExit(2)
                   raise SystemExit(0)
           raise SystemExit(1)
           PY
