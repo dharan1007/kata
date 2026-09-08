@@ -47,6 +47,15 @@ test('documented API authentication is setup-required even without a browser log
   assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|circumvent/);
 });
 
+test('browser-scoped bot challenge does not block an explicitly supported server API',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'not-applicable',cspConnect:'not-applicable',rateLimit:'ok',botProtection:'challenge',botProtectionScope:'browser',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='BOT_CHALLENGE'));
+  assert.match(result.recommendedAction,/server-side|server side/i);
+  assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|evade|disable captcha|circumvent/);
+});
+
 test('CORS-blocked browser API does not downgrade a viable server-side documented API',async()=>{
   const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'blocked',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
   assert.equal(result.status,'possible');
