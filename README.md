@@ -143,6 +143,36 @@ The repository currently implements explicit paths for the protocol contracts do
 
 A modern tool call routes an explicit method and tool name and includes protocol metadata; KATA rejects disagreement rather than guessing caller intent.
 
+A valid tool call is:
+
+```http
+POST /api/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: kata_search_research
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "research-1",
+  "method": "tools/call",
+  "params": {
+    "name": "kata_search_research",
+    "arguments": {
+      "query": "web agents",
+      "limit": 5
+    },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+```
+
 Optional server variables:
 
 ```text
