@@ -1,0 +1,43 @@
+name: Research workflow example
+description: Contribute a reproducible workflow that KATA should teach/represent
+title: "[Workflow]: "
+labels:
+  - help wanted
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Research task
+      description: State the repeatable research outcome in one paragraph.
+    validations:
+      required: true
+  - type: textarea
+    id: demonstrations
+    attributes:
+      label: Two example demonstrations
+      description: Describe two concrete executions with different inputs but shared workflow structure.
+    validations:
+      required: true
+  - type: textarea
+    id: invariant
+    attributes:
+      label: What should generalize?
+      description: Identify operations/relationships that should remain invariant across the examples.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: What must not generalize?
+      description: Give at least one case the learned program should reject or handle differently.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Public example confirmation
+      options:
+        - label: The example contains no private data or credentials.
+          required: true
+        - label: I am comfortable with the example being kept in the public repository/test corpus.
+          required: true

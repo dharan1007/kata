@@ -1,0 +1,56 @@
+name: Connector or client integration
+description: Propose a real research connector or agent-client integration
+title: "[Integration]: "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Integration type
+      options:
+        - Scholarly/research data connector
+        - MCP host/client example
+        - WebMCP integration
+        - Model tool-schema client
+        - Export/import format
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome
+      description: What research workflow becomes possible?
+    validations:
+      required: true
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Upstream/client contract
+      description: Include public docs, authentication, rate limits, normalization needs and relevant protocol versions.
+    validations:
+      required: true
+  - type: textarea
+    id: failures
+    attributes:
+      label: Failure semantics
+      description: How should upstream/client timeout, rate limit, malformed data and authentication failure be represented without mock fallback?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Why this belongs in KATA
+      description: Explain why this is research automation rather than a generic connector catalogue item.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues/roadmap items first.
+          required: true
+        - label: The proposal can fail explicitly rather than substituting synthetic success data.
+          required: true
