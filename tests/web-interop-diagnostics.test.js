@@ -65,6 +65,30 @@ test('browser-scoped bot challenge keeps server API primary even when WebMCP is 
   assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|evade|disable captcha|circumvent/);
 });
 
+test('browser-scoped rate limit does not downgrade an independently supported server API',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'not-applicable',cspConnect:'not-applicable',rateLimit:'limited',rateLimitScope:'browser',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='RATE_LIMITED'));
+  assert.match(result.blockers.find(x=>x.code==='RATE_LIMITED').remediation,/Retry-After|separate supported quota/i);
+  assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|evade|circumvent/);
+});
+
+test('browser-scoped rate limit keeps server API primary when WebMCP is available',async()=>{
+  const result=await diagnose({webMcpApi:'available',frame:'top',toolsPermission:'allowed',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'allowed',cspConnect:'allowed',rateLimit:'limited',rateLimitScope:'browser',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='RATE_LIMITED'));
+  assert.match(result.recommendedAction,/server-side|server side/i);
+});
+
+test('rate limiting without an explicit browser scope remains conservative',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'not-applicable',cspConnect:'not-applicable',rateLimit:'limited',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='RATE_LIMITED'));
+});
+
 test('CORS-blocked browser API does not downgrade a viable server-side documented API',async()=>{
   const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'blocked',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
   assert.equal(result.status,'possible');
