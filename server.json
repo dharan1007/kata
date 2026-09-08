@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dharan1007/kata",
+  "title": "KATA Research Automation",
+  "description": "Deterministic research automation with live OpenAlex search, reusable workflow programs and one canonical tool surface for agents.",
+  "version": "3.0.0",
+  "repository": {
+    "url": "https://github.com/dharan1007/kata",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://kata-webmcp.vercel.app/api/mcp"
+    }
+  ]
+}
