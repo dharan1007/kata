@@ -19,6 +19,15 @@ test('blocked cross-origin WebMCP delegation reports the control and compliant r
   assert.match(result.blockers.find(x=>x.code==='WEBMCP_PERMISSION_POLICY').remediation,/Permissions-Policy|allow="tools"/);
 });
 
+test('blocked WebMCP prefers an already supported documented API fallback',async()=>{
+  const result=await diagnose({webMcpApi:'available',frame:'cross-origin',toolsPermission:'blocked',originExposure:'blocked',api:'documented',auth:'authenticated',cors:'allowed',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_PERMISSION_POLICY'));
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_ORIGIN_EXPOSURE'));
+  assert.match(result.recommendedAction,/server-side|server side/i);
+});
+
 test('authentication and bot controls never produce a bypass recommendation',async()=>{
   const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'required',cors:'allowed',cspConnect:'allowed',rateLimit:'ok',botProtection:'challenge',terms:'allowed',userAuthorizedBrowserFlow:true});
   assert.equal(result.status,'setup_required');
