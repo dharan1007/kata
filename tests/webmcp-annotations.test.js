@@ -6,7 +6,7 @@ function runtimeFixture(){
   const registered=[];
   const runtime={
     modelContext:{
-      async registerTool(tool){registered.push(structuredClone(tool));}
+      async registerTool(tool){registered.push(tool);}
     },
     search:async()=>({}),
     summary:()=>({}),
