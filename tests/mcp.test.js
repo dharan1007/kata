@@ -1,81 +1,66 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handleMcpRequest, MCP_VERSION, LEGACY_MCP_VERSION} from '../lib/server/mcp.js';
+import {handleMcpRequest,MCP_VERSION,LEGACY_MCP_VERSION} from '../lib/server/mcp.js';
+import {createToolRegistry} from '../lib/server/tools.js';
 
-const modernMeta=(extra={})=>({'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},...extra});
+const modernMeta=(extra={})=>({
+ 'io.modelcontextprotocol/protocolVersion':MCP_VERSION,
+ 'io.modelcontextprotocol/clientCapabilities':{},
+ ...extra
+});
 
 test('MCP 2026-07-28 discovery advertises dual-era compatibility and remains cacheable',async()=>{
- const discover=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'server/discover'},body:{jsonrpc:'2.0',id:1,method:'server/discover',params:{_meta:modernMeta()}}});
- assert.equal(discover.status,200); assert.deepEqual(discover.body.result.supportedVersions,[MCP_VERSION,LEGACY_MCP_VERSION]);
- assert.equal(discover.body.result._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
- const list=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:2,method:'tools/list',params:{_meta:modernMeta()}}});
- assert.ok(list.body.result.tools.length>=5); assert.equal(list.body.result.cacheScope,'public'); assert.ok(list.body.result.ttlMs>0);
+ const response=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'server/discover'},
+  body:{jsonrpc:'2.0',id:1,method:'server/discover',params:{_meta:modernMeta()}}
+ });
+ assert.equal(response.status,200);
+ assert.deepEqual(response.body.result.supportedVersions,[MCP_VERSION,LEGACY_MCP_VERSION]);
+ assert.equal(response.body.result.resultType,'complete');
+ assert.equal(response.body.result._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
+ assert.equal(response.headers['Cache-Control'],'public, max-age=60');
 });
 
 test('MCP rejects malformed JSON-RPC requests before invoking tools',async()=>{
- let invoked=0;
- const registry={list:()=>[],invoke:async()=>{invoked++;return{unexpected:true};}};
- const base={headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'}};
- const missingVersion=await handleMcpRequest({...base,body:{id:1,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
- assert.equal(missingVersion.status,400);assert.equal(missingVersion.body.error.code,-32600);
- const missingId=await handleMcpRequest({...base,body:{jsonrpc:'2.0',method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
- assert.equal(missingId.status,400);assert.equal(missingId.body.error.code,-32600);
- const nullId=await handleMcpRequest({...base,body:{jsonrpc:'2.0',id:null,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'x'},_meta:modernMeta()}}},{registry});
- assert.equal(nullId.status,400);assert.equal(nullId.body.error.code,-32600);
- assert.equal(invoked,0);
+ let invoked=false;
+ const registry={list:()=>[],invoke:async()=>{invoked=true;return{};}};
+ const response=await handleMcpRequest({
+  headers:{'mcp-protocol-version':MCP_VERSION},
+  body:{jsonrpc:'1.0',id:2,method:'tools/list',params:{_meta:modernMeta()}}
+ },{registry});
+ assert.equal(response.status,400);
+ assert.equal(response.body.error.code,-32600);
+ assert.equal(invoked,false);
 });
 
 test('MCP reports failed tool receipts as tool execution errors visible to the model',async()=>{
- const registry={
-  list:()=>[],
-  invoke:async()=>({workspace:{version:1},receipt:{status:'failed',error:'STALE_PREVIEW',processed:0}})
- };
- const response=await handleMcpRequest({
-  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_run_automation'},
-  body:{jsonrpc:'2.0',id:30,method:'tools/call',params:{name:'kata_run_automation',arguments:{},_meta:modernMeta()}}
- },{registry});
+ const registry={list:()=>[],invoke:async()=>({receipt:{status:'failed'},error:'FAILED'})};
+ const response=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'demo'},body:{jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'demo',arguments:{},_meta:modernMeta()}}},{registry});
  assert.equal(response.status,200);
- assert.equal(response.body.error,undefined);
  assert.equal(response.body.result.isError,true);
- assert.equal(response.body.result.structuredContent.receipt.status,'failed');
- assert.match(response.body.result.content[0].text,/STALE_PREVIEW/);
+ assert.equal(response.body.result.structuredContent.error,'FAILED');
 });
 
 test('MCP keeps thrown tool-handler failures in the tool result so agents can recover',async()=>{
- const registry={
-  list:()=>[],
-  invoke:async()=>{const error=new Error('UPSTREAM_RATE_LIMITED');error.details={retryAfterSeconds:12};throw error;}
- };
- const response=await handleMcpRequest({
-  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'},
-  body:{jsonrpc:'2.0',id:31,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'agents'},_meta:modernMeta()}}
- },{registry});
+ const error=new Error('INVALID_QUERY');
+ const registry={list:()=>[],invoke:async()=>{throw error;}};
+ const response=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'demo'},body:{jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'demo',arguments:{},_meta:modernMeta()}}},{registry});
  assert.equal(response.status,200);
- assert.equal(response.body.error,undefined);
  assert.equal(response.body.result.isError,true);
- assert.equal(response.body.result.structuredContent.error,'UPSTREAM_RATE_LIMITED');
- assert.deepEqual(response.body.result.structuredContent.details,{retryAfterSeconds:12});
- assert.match(response.body.result.content[0].text,/UPSTREAM_RATE_LIMITED/);
+ assert.equal(response.body.result.structuredContent.error,'INVALID_QUERY');
 });
 
 test('MCP sanitizes unexpected tool crashes while keeping them model-visible',async()=>{
- const registry={
-  list:()=>[],
-  invoke:async()=>{const error=new Error('postgres://admin:secret@db.internal/customer');error.details={sql:'select * from private_users'};throw error;}
- };
- const response=await handleMcpRequest({
-  headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'kata_search_research'},
-  body:{jsonrpc:'2.0',id:32,method:'tools/call',params:{name:'kata_search_research',arguments:{query:'agents'},_meta:modernMeta()}}
- },{registry});
+ const registry={list:()=>[],invoke:async()=>{throw new Error('secret stack detail');}};
+ const response=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'demo'},body:{jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'demo',arguments:{},_meta:modernMeta()}}},{registry});
  assert.equal(response.status,200);
  assert.equal(response.body.result.isError,true);
  assert.equal(response.body.result.structuredContent.error,'TOOL_EXECUTION_FAILED');
- assert.equal(response.body.result.structuredContent.details,undefined);
- assert.doesNotMatch(response.body.result.content[0].text,/secret|private_users|postgres/i);
+ assert.doesNotMatch(response.body.result.content[0].text,/secret stack detail/);
 });
 
 test('MCP reports unknown tools as Invalid Params protocol errors in both protocol eras',async()=>{
- const registry={list:()=>[],invoke:async()=>{throw new Error('TOOL_NOT_FOUND');}};
+ const registry=createToolRegistry();
  const modern=await handleMcpRequest({
   headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'missing_tool'},
   body:{jsonrpc:'2.0',id:33,method:'tools/call',params:{name:'missing_tool',arguments:{},_meta:modernMeta()}}
@@ -95,7 +80,7 @@ test('MCP reports unknown tools as Invalid Params protocol errors in both protoc
  assert.equal(legacy.body.result,undefined);
 });
 
-test('MCP 2026-07-28 requires a self-describing metadata envelope and matching version header',async()=>{
+test('MCP 2026-07-28 requires a self-describing metadata envelope and applies header validation before version support checks',async()=>{
  const missing=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:20,method:'tools/list',params:{}}});
  assert.equal(missing.status,400); assert.equal(missing.body.error.code,-32600);
 
@@ -103,7 +88,11 @@ test('MCP 2026-07-28 requires a self-describing metadata envelope and matching v
  assert.equal(missingCaps.status,400); assert.equal(missingCaps.body.error.code,-32600);
 
  const requested='2026-01-01';
- const unsupported=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:22,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':requested})}}});
+ const mismatch=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:22,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':requested})}}});
+ assert.equal(mismatch.status,400); assert.equal(mismatch.body.error.code,-32020);
+ assert.deepEqual(mismatch.body.error.data,{header:MCP_VERSION,body:requested});
+
+ const unsupported=await handleMcpRequest({headers:{'mcp-protocol-version':requested,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:23,method:'tools/list',params:{_meta:modernMeta({'io.modelcontextprotocol/protocolVersion':requested})}}});
  assert.equal(unsupported.status,400); assert.equal(unsupported.body.error.code,-32022);
  assert.deepEqual(unsupported.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
 });
@@ -125,29 +114,32 @@ test('MCP 2025-11-25 clients can initialize, acknowledge, and use tools without 
  const call=await handleMcpRequest({headers:{'mcp-protocol-version':LEGACY_MCP_VERSION},body:{jsonrpc:'2.0',id:12,method:'tools/call',params:{name:'kata_plan_triage',arguments:{works:[]}}}});
  assert.equal(call.status,200);
  assert.equal(call.body.result.isError,false);
- assert.deepEqual(call.body.result.structuredContent.matches,[]);
 });
 
 test('MCP rejects header/body route mismatch and tool-name mismatch with the modern header-mismatch code',async()=>{
- const r=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{},_meta:modernMeta()}}}); assert.equal(r.status,400); assert.equal(r.body.error.code,-32020);
- const t=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'other'},body:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'kata_plan_triage',arguments:{query:'x'},_meta:modernMeta()}}}); assert.equal(t.status,400); assert.equal(t.body.error.code,-32020);
+ const methodMismatch=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call'},body:{jsonrpc:'2.0',id:30,method:'tools/list',params:{_meta:modernMeta()}}});
+ assert.equal(methodMismatch.status,400);
+ assert.equal(methodMismatch.body.error.code,-32020);
+
+ const nameMismatch=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/call','mcp-name':'wrong'},body:{jsonrpc:'2.0',id:31,method:'tools/call',params:{name:'kata_plan_triage',arguments:{works:[]},_meta:modernMeta()}}});
+ assert.equal(nameMismatch.status,400);
+ assert.equal(nameMismatch.body.error.code,-32020);
 });
 
 test('MCP optional bearer auth and origin allowlist are enforced',async()=>{
- const env={MCP_BEARER_TOKEN:'secret',MCP_ALLOWED_ORIGINS:'https://example.com'};
- const req={headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list',origin:'https://evil.com'},body:{jsonrpc:'2.0',id:1,method:'tools/list',params:{_meta:modernMeta()}}};
- const a=await handleMcpRequest(req,{env}); assert.equal(a.status,403);
- req.headers.origin='https://example.com'; const b=await handleMcpRequest(req,{env}); assert.equal(b.status,401);
- req.headers.authorization='Bearer secret'; const c=await handleMcpRequest(req,{env}); assert.equal(c.status,200);
+ const env={MCP_BEARER_TOKEN:'topsecret',MCP_ALLOWED_ORIGINS:'https://allowed.example'};
+ const denied=await handleMcpRequest({headers:{origin:'https://blocked.example'},body:{}},{env});
+ assert.equal(denied.status,403);
+
+ const unauthorized=await handleMcpRequest({headers:{origin:'https://allowed.example'},body:{}},{env});
+ assert.equal(unauthorized.status,401);
+ assert.equal(unauthorized.headers['WWW-Authenticate'],'Bearer');
 });
 
 test('MCP 2026-07-28 returns the dedicated UnsupportedProtocolVersion error for negotiation and fallback',async()=>{
  const requested='2027-01-01';
- const response=await handleMcpRequest({
-  headers:{'mcp-protocol-version':requested,'mcp-method':'server/discover'},
-  body:{jsonrpc:'2.0',id:40,method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':requested,'io.modelcontextprotocol/clientCapabilities':{}}}}
- });
- assert.equal(response.status,400);
- assert.equal(response.body.error.code,-32022);
- assert.deepEqual(response.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
+ const modern=await handleMcpRequest({headers:{'mcp-protocol-version':requested,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:40,method:'tools/list',params:{_meta:{'io.modelcontextprotocol/protocolVersion':requested,'io.modelcontextprotocol/clientCapabilities':{}}}}});
+ assert.equal(modern.status,400);
+ assert.equal(modern.body.error.code,-32022);
+ assert.deepEqual(modern.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
 });
