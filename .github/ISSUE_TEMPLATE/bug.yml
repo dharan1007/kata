@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible KATA defect
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - OpenAlex / research search
+        - Browser workspace
+        - Automation
+        - Teach / workflow program
+        - HTTPS API
+        - Remote MCP
+        - Browser WebMCP
+        - OpenAI/Anthropic/Gemini schema projection
+        - UI / routing
+        - Deployment
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include request/workflow, protocol version and headers/envelope where relevant. Remove credentials.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: errors
+    attributes:
+      label: Typed error / logs
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Client/browser/runtime
+      placeholder: "Chrome 152, MCP client X, Node 24..."
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I removed credentials, tokens and private data from this report.
+          required: true
