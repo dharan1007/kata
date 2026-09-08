@@ -1,29 +1,191 @@
-# KATA v3
+# KATA
 
-KATA is a deterministic research-automation substrate for humans and agents. One canonical semantic engine is exposed through the web UI, generic HTTPS, remote MCP, browser WebMCP, OpenAI-style function schemas, Anthropic-style tool schemas, and Gemini function-tool schemas.
+**Teach repeatable research workflows once, then expose them as deterministic tools for humans and agents.**
 
-KATA does not substitute synthetic connector output when a real integration fails. The production connector is OpenAlex; upstream failures are explicit and typed.
+KATA combines a real scholarly-data connector, a durable browser workspace, demonstration-derived workflow programs and one canonical semantic engine exposed through HTTPS, remote MCP, browser WebMCP and model-native function schemas.
 
-## What is real
+[**Try KATA**](https://kata-webmcp.vercel.app/) · [Developers](https://kata-webmcp.vercel.app/developers) · [Tools](https://kata-webmcp.vercel.app/tools) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](ROADMAP.md)
 
-- Live OpenAlex search with bounded retry, timeout, normalization, optional API-key authentication, upstream rate-limit telemetry, and no mock fallback.
-- Browser-owned durable workspace using versioned local storage.
-- Allowlisted semantic commands: save work, priority, tags, and notes.
-- Preview-bound, transactional automations with `AFTER_SEARCH`, `WORKSPACE_OPEN`, and `MANUAL` triggers.
+[![KATA Release Gate](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml/badge.svg)](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## The idea in one minute
+
+```text
+research task
+   ↓
+search real scholarly data
+   ↓
+save / prioritize / tag / annotate
+   ↓
+demonstrate a workflow twice
+   ↓
+KATA anti-unifies the demonstrations
+   ↓
+portable validated workflow program
+   ↓
+invoke through UI / HTTPS / MCP / WebMCP / model tool schemas
+```
+
+KATA's goal is not to hide nondeterminism behind an "agent" label. Connector failures remain explicit. Tool arguments are schema-validated. Automations are preview-bound. Browser cancellation is propagated through fetch/state commits. The same semantic engine powers every surface.
+
+## Try the real product
+
+Open [kata-webmcp.vercel.app](https://kata-webmcp.vercel.app/) and use the product routes:
+
+- `/research` — search live OpenAlex data and work with normalized results.
+- `/dashboard` — inspect the durable browser workspace.
+- `/automations` — create preview-bound automations.
+- `/teach` — derive reusable programs from demonstrations.
+- `/tools` — inspect the canonical tool surface.
+- `/developers` — integration and protocol guidance.
+- `/activity` — inspect recent workspace activity.
+
+The production connector is **OpenAlex**. KATA does not replace a failed real connector request with synthetic success data.
+
+## Why KATA exists
+
+Agent workflows often fail in two opposite ways:
+
+1. every new workflow becomes hand-written integration code, or
+2. a model is given broad tools and expected to rediscover the procedure every time.
+
+KATA explores a stricter middle layer: reusable workflow semantics derived from examples, represented as validated programs and invoked through a stable canonical tool registry.
+
+| Problem | KATA's boundary |
+|---|---|
+| Scholarly discovery | Live OpenAlex search with typed upstream failures |
+| Repeated human procedure | Two-demonstration anti-unification into portable programs |
+| Agent integration | Canonical schemas projected into multiple tool protocols |
+| Browser automation | Preview-bound triggers and bounded nested execution |
+| Protocol drift | Explicit MCP compatibility paths rather than silent guessing |
+| Cancellation | Abort propagated through browser requests/state commits |
+| Cross-origin exposure | Default deny; explicit origin configuration required |
+| State | Browser-owned durable workspace; no hidden cloud-workspace claims |
+
+## What is implemented
+
+- Live OpenAlex search with bounded retry, timeout, normalization, optional API-key authentication and rate-limit telemetry.
+- Versioned durable browser workspace.
+- Allowlisted semantic commands for saved work, priority, tags and notes.
+- Preview-bound transactional automations with `AFTER_SEARCH`, `WORKSPACE_OPEN` and `MANUAL` triggers.
 - Nested automation tool calls with a maximum execution depth of four.
 - Two-demonstration anti-unification into portable JSON-Schema programs.
-- Remote MCP with native `2026-07-28` stateless `server/discover`, `tools/list`, `tools/call`, `Mcp-Method`, `Mcp-Name`, list TTL/cache scope, optional bearer auth, and Origin allowlisting.
-- Backward-compatible MCP `2025-11-25` handshake-era support for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`, without requiring 2026 routing headers.
-- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations, invocation cancellation propagated through browser fetches/state commits, and opt-in secure-origin cross-frame exposure.
-- Generic `/api/invoke` plus `/api/agents` OpenAI, Anthropic, and Gemini schema bridges derived from the same canonical registry.
+- Remote MCP with the protocol paths currently documented below.
+- Browser WebMCP through `document.modelContext.registerTool()` with abortable registration generations and invocation cancellation.
+- Generic `/api/invoke` plus OpenAI-, Anthropic- and Gemini-style schema projections from the same canonical registry.
+- Bounded API bodies and canonical JSON-Schema argument validation.
+- No runtime npm dependencies in the current package.
+
+## Canonical API
+
+Public HTTP surfaces:
+
+```text
+GET  /api/health
+GET  /api/capabilities
+GET  /api/search?query=web%20agents&limit=8
+POST /api/invoke
+POST /api/triage
+POST /api/compile
+POST /api/execute
+GET  /api/agents
+POST /api/mcp
+GET  /api/openapi
+```
+
+Compatibility alias:
+
+```text
+/api/openalex/search → /api/search
+```
+
+### Generic invocation
+
+```http
+POST /api/invoke
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "kata_search_research",
+  "arguments": {
+    "query": "web agents",
+    "limit": 5
+  }
+}
+```
+
+## OpenAlex production configuration
+
+KATA works without a key, but authenticated OpenAlex usage can provide a materially larger allowance and account-specific usage telemetry.
+
+Optional server-side variable:
+
+```text
+OPENALEX_API_KEY
+```
+
+It is sent only to `api.openalex.org` as an authorization credential and is not returned to clients.
+
+When the upstream provides rate-limit headers, KATA normalizes non-secret usage information under `meta.rateLimit` so callers can distinguish connector exhaustion from product failure.
+
+## Remote MCP
+
+KATA exposes remote MCP at:
+
+```text
+POST /api/mcp
+```
+
+The repository currently implements explicit paths for the protocol contracts documented by the checked-in release, including modern stateless request routing and compatibility with the earlier handshake-era path. See `GET /api/capabilities` for the machine-readable contract and the existing test suite for exact accepted/rejected envelopes.
+
+A modern tool call routes an explicit method and tool name and includes protocol metadata; KATA rejects disagreement rather than guessing caller intent.
+
+Optional server variables:
+
+```text
+MCP_BEARER_TOKEN
+MCP_ALLOWED_ORIGINS
+```
+
+`MCP_BEARER_TOKEN` protects remote MCP with bearer authentication. Browser-origin remote MCP is default-deny when no origin allowlist is configured; non-browser MCP clients do not require an Origin header.
+
+## WebMCP
+
+KATA targets the current imperative browser producer API through `document.modelContext.registerTool()` when the browser provides it.
+
+Registration generations share an `AbortController`; refreshing/disposal aborts stale registrations. Invocation `AbortSignal`s propagate into KATA's browser request path so cancelled search/automation/program executions do not commit partial workspace state.
+
+Cross-origin exposure is opt-in. A deployment may provide exact trusted HTTPS origins through:
+
+```html
+<meta name="kata-webmcp-exposed-to" content="https://agent.example,https://partner.example">
+```
+
+Malformed origins, wildcards, credentials, paths, query strings and fragments are discarded. Stock deployment framing policy remains restrictive unless an operator deliberately changes it.
 
 ## Product boundary
 
-KATA's browser triggers execute while KATA is open. It does not claim unattended cloud scheduling because this release intentionally has no durable authenticated cloud workspace/runner. Protocol state is stateless: callers send workspace snapshots and receive validated next snapshots. Legacy MCP compatibility is also served without hidden server session state.
+KATA's browser triggers execute while KATA is open. The current release does **not** claim unattended cloud scheduling because it intentionally has no durable authenticated cloud workspace/runner.
 
-## Run and verify
+Modern protocol calls are stateless: callers provide workspace snapshots and receive validated next snapshots. KATA does not hide a server-side session merely to make demos look stateful.
 
-Requirement: Node.js 24.x, matching the production Vercel runtime and release gate.
+## Run locally
+
+Requirement: Node.js 24.x.
+
+```bash
+git clone https://github.com/dharan1007/kata.git
+cd kata
+npm install
+npm run check
+```
+
+The current package declares no runtime dependencies.
+
+## Verification
 
 ```bash
 npm test
@@ -32,151 +194,37 @@ npm run static-check
 npm run check
 ```
 
-No runtime npm dependencies are required.
+Production promotion should be treated separately from code verification: a green release gate does not turn a failed deployment into a successful one. Verify the canonical deployment and live APIs after promotion.
 
-## Public routes
+## Security principles
 
-`/`, `/dashboard`, `/research`, `/automations`, `/teach`, `/tools`, `/developers`, `/activity`, `/learn`, `/settings`.
-
-## HTTP/API surfaces
-
-- `GET /api/health`
-- `GET /api/capabilities`
-- `GET /api/search?query=web%20agents&limit=8`
-- `POST /api/invoke`
-- `POST /api/triage`
-- `POST /api/compile`
-- `POST /api/execute`
-- `GET /api/agents`
-- `POST /api/mcp`
-- `GET /api/openapi`
-- Compatibility alias: `/api/openalex/search` → `/api/search`
-
-### Generic tool invocation
-
-```json
-POST /api/invoke
-{
-  "name": "kata_search_research",
-  "arguments": {"query":"web agents","limit":5}
-}
-```
-
-### OpenAlex production configuration
-
-KATA works without an OpenAlex key, but OpenAlex's current production guidance recommends using a free API key for real-scale applications because authenticated usage receives a materially larger daily allowance and exposes account-specific usage tracking.
-
-Optional environment variable:
-
-- `OPENALEX_API_KEY`: sent only server-side as `Authorization: Bearer ...` to `api.openalex.org`. It is never returned to KATA clients.
-
-When OpenAlex returns rate-limit headers, KATA exposes the non-secret usage telemetry under `meta.rateLimit`:
-
-```json
-{
-  "limit": 10000,
-  "remaining": 8766,
-  "creditsUsed": 1,
-  "resetSeconds": 43200
-}
-```
-
-This allows operators and agent integrations to distinguish healthy connector capacity from an approaching upstream budget/rate-limit boundary without exposing credentials.
-
-## Remote MCP
-
-Endpoint: `POST /api/mcp`.
-
-### MCP 2026-07-28
-
-Modern request/response calls are stateless and self-describing. Every modern request/response call must include the `MCP-Protocol-Version` and `Mcp-Method` routing headers. A `tools/call` request must additionally include `Mcp-Name`, and that value must exactly match `params.name`. Modern notification POSTs are different: the 2026-07-28 transport does not define routing-header presence requirements for notifications, so KATA accepts a valid modern notification envelope without `MCP-Protocol-Version`, `Mcp-Method`, or `Mcp-Name` and returns HTTP 202.
-
-Every modern request, including notifications, must include `params._meta` with:
-
-- `io.modelcontextprotocol/protocolVersion`: exactly `2026-07-28`. For request/response calls it must match the `MCP-Protocol-Version` header.
-- `io.modelcontextprotocol/clientCapabilities`: an object. Use `{}` when the client has no additional capabilities to declare.
-- `io.modelcontextprotocol/clientInfo`: optional client information object.
-
-A valid tool call is:
-
-```http
-POST /api/mcp
-Content-Type: application/json
-Accept: application/json, text/event-stream
-MCP-Protocol-Version: 2026-07-28
-Mcp-Method: tools/call
-Mcp-Name: kata_search_research
-```
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "kata_search_research",
-    "arguments": {
-      "query": "web agents",
-      "limit": 3
-    },
-    "_meta": {
-      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-      "io.modelcontextprotocol/clientCapabilities": {}
-    }
-  }
-}
-```
-
-KATA rejects missing modern metadata, protocol header/body disagreement on request/response calls, `Mcp-Method` disagreement, and `Mcp-Name`/tool-name disagreement rather than silently guessing the caller's intent. `GET /api/capabilities` publishes both request/response and notification header requirements so clients can discover the transport contract programmatically.
-
-### MCP 2025-11-25 compatibility
-
-Handshake-era clients using `2025-11-25` are accepted on the same endpoint. They may initialize with the standard `initialize` request, acknowledge with `notifications/initialized`, and then call `tools/list`, `tools/call`, or `ping` using `MCP-Protocol-Version: 2025-11-25`. They do not need the 2026 `Mcp-Method`, `Mcp-Name`, or 2026 `_meta` request envelope.
-
-`GET /api/capabilities` exposes both supported versions so agents and integrations can choose the correct path explicitly.
-
-Optional environment variables:
-
-- `MCP_BEARER_TOKEN`: require `Authorization: Bearer ...` for remote MCP.
-- `MCP_ALLOWED_ORIGINS`: comma-separated browser Origins allowed to call remote MCP. Browser-origin MCP is denied by default when no allowlist is configured; non-browser MCP clients do not need an Origin header.
-
-## WebMCP
-
-KATA targets the current `document.modelContext` producer API. A registration generation uses a shared `AbortController`; refreshing or disposing aborts old registrations. Browsers without WebMCP remain usable through HTTP/MCP and show compatibility status instead of pretending WebMCP is connected. Invocation `AbortSignal`s are propagated through KATA's browser request path; cancelled search/automation/program executions do not commit partial browser workspace state.
-
-Cross-origin tool discovery is default-deny. To intentionally expose an embedded KATA instance to specific parent/agent origins, add a trusted static configuration meta tag before KATA's module script:
-
-```html
-<meta name="kata-webmcp-exposed-to" content="https://agent.example,https://partner.example">
-```
-
-KATA validates this list and forwards only exact HTTPS origins through `registerTool(..., { exposedTo })`. Wildcards, HTTP origins, credentials, paths, query strings, fragments, and malformed values are discarded. If the meta tag is absent or no valid origins remain, KATA omits `exposedTo` entirely and retains WebMCP's same-origin default.
-
-Chrome's cross-origin WebMCP model has two additional gates outside KATA. The parent page must delegate the `tools` Permissions Policy to the iframe:
-
-```html
-<iframe src="https://kata.example" allow="tools"></iframe>
-```
-
-The parent/agent must then explicitly request KATA's origin when discovering tools:
-
-```js
-const tools = await document.modelContext.getTools({
-  fromOrigins: ['https://kata.example']
-});
-```
-
-All three WebMCP conditions are required: parent `allow="tools"`, KATA `exposedTo`, and caller `fromOrigins`. KATA does not bypass any of these browser security boundaries.
-
-Framing policy is a separate browser boundary. The stock `vercel.json` intentionally ships `frame-ancestors 'none'` and `X-Frame-Options: DENY`, so the public KATA deployment cannot be embedded by another origin. Operators who intentionally enable cross-origin iframe use must change their deployment's framing policy to an explicit trusted-parent allowlist; do not use wildcard framing. The hosted KATA deployment remains non-embeddable unless that policy is deliberately changed.
-
-## Security/release policy
-
-- No `eval`, `new Function`, arbitrary shell execution, or generic URL-fetch agent tool.
+- No `eval`, `new Function`, arbitrary shell execution or generic URL-fetch agent tool.
 - Strict CSP with first-party scripts/styles/connections only.
-- External scholarly output is treated as untrusted content and escaped before rendering.
+- Scholarly output is untrusted content and must be escaped before rendering.
 - External result links accept only HTTP(S).
 - API bodies are bounded.
-- Tool arguments are validated against canonical JSON Schema before handler execution.
-- Unsupported automation triggers are rejected, never silently downgraded.
-- Production is not promoted unless tests, build, integrity/security checks, Vercel build status, live routes, APIs, OpenAlex, and runtime-error checks pass.
+- Canonical JSON Schema validates tool arguments before handler execution.
+- Unsupported automation triggers are rejected rather than silently downgraded.
+- Cross-origin browser tool exposure is default-deny.
+
+See [`SECURITY.md`](SECURITY.md) before changing protocol, connector or execution boundaries.
+
+## Contributing
+
+KATA needs connector fixtures, workflow examples, protocol compatibility tests, documentation and carefully bounded integrations. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), [`good first issue`](https://github.com/dharan1007/kata/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), or [`help wanted`](https://github.com/dharan1007/kata/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
+
+## Roadmap
+
+See [`ROADMAP.md`](ROADMAP.md). The priority is to prove reusable workflow generalization and integration reliability before expanding into a catalogue of shallow connectors.
+
+## Related projects
+
+- [PACT](https://github.com/dharan1007/pact) — transactional safety for consequential agent actions.
+- [SPOOL](https://github.com/dharan1007/spool) — deterministic local-first data migration.
+- [FAULTLINE](https://github.com/dharan1007/faultline) — causal browser-failure reduction.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
+If KATA solves a workflow/research-automation problem you care about, star the repository to follow development and help other agent-tool builders discover it.
