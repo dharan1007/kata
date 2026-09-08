@@ -49,6 +49,7 @@ jobs:
 
           assert server['name'] == 'io.github.dharan1007/kata'
           assert server['version'] == package['version']
+          assert 1 <= len(server['description']) <= 100
           assert server['remotes'] == [{
               'type': 'streamable-http',
               'url': 'https://kata-webmcp.vercel.app/api/mcp'
