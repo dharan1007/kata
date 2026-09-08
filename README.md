@@ -89,11 +89,11 @@ Endpoint: `POST /api/mcp`.
 
 ### MCP 2026-07-28
 
-Modern requests are stateless and self-describing. Every modern request must include the `MCP-Protocol-Version` and `Mcp-Method` routing headers. A `tools/call` request must additionally include `Mcp-Name`, and that value must exactly match `params.name`.
+Modern request/response calls are stateless and self-describing. Every modern request/response call must include the `MCP-Protocol-Version` and `Mcp-Method` routing headers. A `tools/call` request must additionally include `Mcp-Name`, and that value must exactly match `params.name`. Modern notification POSTs are different: the 2026-07-28 transport does not define routing-header presence requirements for notifications, so KATA accepts a valid modern notification envelope without `MCP-Protocol-Version`, `Mcp-Method`, or `Mcp-Name` and returns HTTP 202.
 
-Every modern request must also include `params._meta` with:
+Every modern request, including notifications, must include `params._meta` with:
 
-- `io.modelcontextprotocol/protocolVersion`: exactly `2026-07-28`. It must match the `MCP-Protocol-Version` header.
+- `io.modelcontextprotocol/protocolVersion`: exactly `2026-07-28`. For request/response calls it must match the `MCP-Protocol-Version` header.
 - `io.modelcontextprotocol/clientCapabilities`: an object. Use `{}` when the client has no additional capabilities to declare.
 - `io.modelcontextprotocol/clientInfo`: optional client information object.
 
@@ -127,7 +127,7 @@ Mcp-Name: kata_search_research
 }
 ```
 
-KATA rejects missing modern metadata, protocol header/body disagreement, `Mcp-Method` disagreement, and `Mcp-Name`/tool-name disagreement rather than silently guessing the caller's intent. `GET /api/capabilities` publishes these required headers and metadata keys so clients can discover the request contract programmatically.
+KATA rejects missing modern metadata, protocol header/body disagreement on request/response calls, `Mcp-Method` disagreement, and `Mcp-Name`/tool-name disagreement rather than silently guessing the caller's intent. `GET /api/capabilities` publishes both request/response and notification header requirements so clients can discover the transport contract programmatically.
 
 ### MCP 2025-11-25 compatibility
 
