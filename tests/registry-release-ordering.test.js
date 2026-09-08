@@ -8,13 +8,13 @@ test('MCP Registry publication is downstream of verified production deployment',
   assert.match(workflow,/workflows:\s*\["KATA Production Deploy"\]/);
   assert.doesNotMatch(workflow,/workflows:\s*\["KATA Release Gate"\]/);
   assert.match(workflow,/release\.json/);
-  assert.match(workflow,/source\?\.sha/);
-  assert.match(workflow,/source\?\.provenance/);
+  assert.match(workflow,/release\.get\('source', \{\}\)\.get\('sha'\)/);
+  assert.match(workflow,/release\.get\('source', \{\}\)\.get\('provenance'\)/);
+  assert.match(workflow,/health\.get\('version'\) == server\['version'\]/);
 });
 
 test('existing immutable Registry versions are metadata-verified instead of blindly skipped',()=>{
   assert.match(workflow,/Registry entry exists but immutable metadata differs/);
-  assert.match(workflow,/description/);
-  assert.match(workflow,/repository/);
-  assert.match(workflow,/remotes/);
+  assert.match(workflow,/immutable_fields = \('name', 'title', 'description', 'version', 'repository', 'remotes'\)/);
+  assert.match(workflow,/raise SystemExit\(2\)/);
 });
