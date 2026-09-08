@@ -1,0 +1,34 @@
+# KATA
+
+> Deterministic research automation for humans and agents: live scholarly search, durable browser workspace, reusable workflow programs, HTTPS, remote MCP, browser WebMCP and model-native tool schemas from one canonical engine.
+
+Canonical repository: https://github.com/dharan1007/kata
+Live product: https://kata-webmcp.vercel.app/
+Remote MCP endpoint: https://kata-webmcp.vercel.app/api/mcp
+
+## Start here
+
+- README: https://github.com/dharan1007/kata/blob/main/README.md
+- Security: https://github.com/dharan1007/kata/blob/main/SECURITY.md
+- Roadmap: https://github.com/dharan1007/kata/blob/main/ROADMAP.md
+- Contributing: https://github.com/dharan1007/kata/blob/main/CONTRIBUTING.md
+- MCP Registry metadata: https://github.com/dharan1007/kata/blob/main/server.json
+- Live capabilities: https://kata-webmcp.vercel.app/api/capabilities
+- Live OpenAPI: https://kata-webmcp.vercel.app/api/openapi
+
+## Core facts
+
+- Node.js: 24.x release/runtime contract.
+- Runtime npm dependencies: none in the current package.
+- Production research connector: OpenAlex.
+- Upstream failures: explicit; no synthetic success fallback.
+- Workspace: browser-owned durable versioned state.
+- Programs: two-demonstration anti-unification into validated reusable programs.
+- Agent surfaces: generic HTTPS, remote MCP, browser WebMCP, OpenAI/Anthropic/Gemini-style schemas.
+- Remote MCP: `/api/mcp`.
+- Security: canonical schema validation, bounded bodies, origin controls, no arbitrary shell/eval URL-fetch tool.
+- License: MIT.
+
+## Current boundary
+
+Browser triggers run while KATA is open. The current release is not an unattended authenticated cloud scheduler. Protocol behavior must be read from the checked-in tests and `/api/capabilities`; do not infer support from project marketing alone.
