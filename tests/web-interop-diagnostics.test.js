@@ -38,6 +38,15 @@ test('authentication and bot controls never produce a bypass recommendation',asy
   assert.match(guidance,/user-authorized|documented api/);
 });
 
+test('documented API authentication is setup-required even without a browser login flow',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'required',cors:'not-applicable',cspConnect:'not-applicable',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='AUTH_REQUIRED'));
+  assert.match(result.recommendedAction,/credential|oauth/i);
+  assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|circumvent/);
+});
+
 test('CORS-blocked browser API does not downgrade a viable server-side documented API',async()=>{
   const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'blocked',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
   assert.equal(result.status,'possible');
