@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createToolRegistry,toolDefinitions} from '../lib/server/tools.js';
+
+const diagnose=async environment=>createToolRegistry({openAlex:async()=>({works:[]})}).invoke('kata_diagnose_web_interop',{intent:'automate',environment});
+
+test('canonical registry exposes deterministic web interoperability diagnostics',()=>{
+  const tool=toolDefinitions.find(x=>x.name==='kata_diagnose_web_interop');
+  assert.ok(tool);
+  assert.equal(tool.annotations.readOnlyHint,true);
+  assert.equal(tool.annotations.openWorldHint,false);
+});
+
+test('blocked cross-origin WebMCP delegation reports the control and compliant remediation',async()=>{
+  const result=await diagnose({webMcpApi:'available',frame:'cross-origin',toolsPermission:'blocked',originExposure:'allowed',api:'none',auth:'none',cors:'not-applicable',cspConnect:'not-applicable',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false});
+  assert.equal(result.status,'blocked');
+  assert.equal(result.primaryPath,'webmcp');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_PERMISSION_POLICY'));
+  assert.match(result.blockers.find(x=>x.code==='WEBMCP_PERMISSION_POLICY').remediation,/Permissions-Policy|allow="tools"/);
+});
+
+test('authentication and bot controls never produce a bypass recommendation',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'required',cors:'allowed',cspConnect:'allowed',rateLimit:'ok',botProtection:'challenge',terms:'allowed',userAuthorizedBrowserFlow:true});
+  assert.equal(result.status,'setup_required');
+  assert.ok(result.blockers.some(x=>x.code==='AUTH_REQUIRED'));
+  assert.ok(result.blockers.some(x=>x.code==='BOT_CHALLENGE'));
+  const guidance=JSON.stringify(result).toLowerCase();
+  assert.doesNotMatch(guidance,/bypass|evade|disable captcha|circumvent/);
+  assert.match(guidance,/user-authorized|documented api/);
+});
+
+test('CORS-blocked browser API prefers a legitimate server-side documented API path when available',async()=>{
+  const result=await diagnose({webMcpApi:'unavailable',frame:'top',toolsPermission:'unknown',originExposure:'not-required',api:'documented',auth:'authenticated',cors:'blocked',cspConnect:'allowed',rateLimit:'ok',botProtection:'clear',terms:'allowed',userAuthorizedBrowserFlow:false,serverSideApiAvailable:true});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='CORS_BLOCKED'));
+  assert.match(result.recommendedAction,/server-side|server side/i);
+});
