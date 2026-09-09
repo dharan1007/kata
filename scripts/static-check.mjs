@@ -41,14 +41,15 @@ for(const file of distJs){
     if(!target.startsWith(`${dist}${path.sep}`)||!fs.existsSync(target))throw new Error(`Broken production module import ${path.relative(dist,file)} -> ${ref}`);
   }
 }
-for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js']){
+for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js','mcp-adapter.js']){
   const packaged=fs.readFileSync(path.join(dist,'extension',module),'utf8');
   const canonical=fs.readFileSync(path.join(root,'src',module),'utf8');
   if(packaged!==canonical)throw new Error(`Extension ${module} drifted from canonical browser module`);
 }
 const packagedWorker=fs.readFileSync(path.join(dist,'extension/service-worker.js'),'utf8');
-for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js'])if(!packagedWorker.includes(`from './${module}'`))throw new Error(`Extension service worker does not import packaged canonical ${module}`);
+for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js','mcp-adapter.js'])if(!packagedWorker.includes(`from './${module}'`))throw new Error(`Extension service worker does not import packaged canonical ${module}`);
 if(!packagedWorker.includes("world:'MAIN',func:executePageApiRequest"))throw new Error('Extension API execution must remain in the authorized page MAIN world');
+if(!packagedWorker.includes("credentials:'omit'")||!packagedWorker.includes("automaticRetries:false"))throw new Error('Extension MCP/API execution must preserve credential-free/no-auto-retry boundaries');
 
 const integrityBytes=fs.readFileSync(path.join(root,'dist/integrity.json'));
 const manifest=JSON.parse(integrityBytes.toString('utf8'));
@@ -57,8 +58,8 @@ for(const [rel,meta] of Object.entries(manifest.assets)){
   const sha=createHash('sha256').update(b).digest('hex');
   if(sha!==meta.sha256)throw new Error(`Integrity mismatch ${rel}`);
 }
-for(const requiredExtensionAsset of ['/extension/manifest.json','/extension/service-worker.js','/extension/runtime-probe.js','/extension/api-discovery.js','/extension/api-adapter.js','/extension/api-execution.js','/extension/popup.html','/extension/popup.js','/extension/popup.css'])if(!manifest.assets[requiredExtensionAsset])throw new Error(`Extension asset not integrity-bound: ${requiredExtensionAsset}`);
-for(const requiredWebAsset of ['/src/api-discovery.js','/src/api-adapter.js','/src/api-execution.js'])if(!manifest.assets[requiredWebAsset])throw new Error(`Web interoperability asset not integrity-bound: ${requiredWebAsset}`);
+for(const requiredExtensionAsset of ['/extension/manifest.json','/extension/service-worker.js','/extension/runtime-probe.js','/extension/api-discovery.js','/extension/api-adapter.js','/extension/api-execution.js','/extension/mcp-adapter.js','/extension/popup.html','/extension/popup.js','/extension/popup.css'])if(!manifest.assets[requiredExtensionAsset])throw new Error(`Extension asset not integrity-bound: ${requiredExtensionAsset}`);
+for(const requiredWebAsset of ['/src/api-discovery.js','/src/api-adapter.js','/src/api-execution.js','/src/mcp-adapter.js'])if(!manifest.assets[requiredWebAsset])throw new Error(`Web interoperability asset not integrity-bound: ${requiredWebAsset}`);
 
 const release=JSON.parse(fs.readFileSync(path.join(root,'dist/release.json'),'utf8'));
 if(release.schemaVersion!==2||release.service!=='kata-webmcp'||release.version!=='3.0.0')throw new Error('Invalid release provenance contract');
@@ -71,4 +72,4 @@ if(integrityEvidence?.path!=='/integrity.json')throw new Error('Release contract
 if(integrityEvidence?.sha256!==manifestSha256)throw new Error('Release contract does not bind the emitted integrity manifest');
 if(integrityEvidence?.bytes!==integrityBytes.length)throw new Error('Release contract integrity byte count mismatch');
 
-console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, ${distJs.length} production modules import-resolved, active-tab extension permission/runtime/API compiler/API execution parity enforced, source provenance ${release.source?.provenance}, integrity evidence bound.`);
+console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, ${distJs.length} production modules import-resolved, active-tab extension permission/runtime/API/MCP adapter parity enforced, source provenance ${release.source?.provenance}, integrity evidence bound.`);
