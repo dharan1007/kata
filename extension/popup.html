@@ -26,7 +26,7 @@
     <section class="api-compiler">
       <h2>API agent contracts</h2>
       <button id="compile-api-tools" type="button">Compile discovered API tools</button>
-      <p class="muted">Discovers standards-declared OpenAPI and creates local agent contracts. Execution is available only for a freshly re-discovered same-origin operation after an exact request preview and a second explicit action. KATA never asks you to paste cookies, API keys, or bearer tokens.</p>
+      <p class="muted">Discovers standards-declared OpenAPI and creates local agent contracts. Execution is available only for a freshly re-discovered same-origin operation after an exact request preview and a second explicit action.</p>
       <div id="api-tools-result" hidden>
         <div id="api-tools-summary"></div>
         <label for="api-operation">Operation</label>
@@ -93,6 +93,59 @@
         </div>
       </div>
     </section>
+    <section class="session-auth">
+      <h2>Session authorization</h2>
+      <p class="muted">Secrets stay in <code>chrome.storage.session</code> for this browser session only. They are not model arguments, are not sent to KATA, are not persisted to disk/sync, and cannot be revealed from this UI after saving.</p>
+      <label for="session-credential-kind">Credential type</label>
+      <select id="session-credential-kind">
+        <option value="bearer-token">Bearer / OAuth access token</option>
+        <option value="api-key">API key</option>
+      </select>
+      <label for="session-scheme-name">OpenAPI/MCP security scheme name</label>
+      <input id="session-scheme-name" autocomplete="off" spellcheck="false" placeholder="BearerAuth">
+      <label for="session-api-key-location">API-key location</label>
+      <select id="session-api-key-location"><option value="header">Header</option><option value="query">Query</option></select>
+      <label for="session-api-key-name">API-key parameter name</label>
+      <input id="session-api-key-name" autocomplete="off" spellcheck="false" placeholder="X-API-Key">
+      <label for="session-scopes">Scopes (comma separated)</label>
+      <input id="session-scopes" autocomplete="off" spellcheck="false" placeholder="read, write">
+      <label for="session-secret">Secret</label>
+      <input id="session-secret" type="password" autocomplete="new-password" spellcheck="false">
+      <button id="session-save-credential" type="button">Save for this browser session</button>
+      <label for="session-credential-list">Session credentials for this origin</label>
+      <select id="session-credential-list"></select>
+      <button id="session-remove-credential" type="button">Remove selected credential</button>
+      <button id="session-clear-credentials" type="button">Clear origin credentials</button>
+      <h3>Protected API</h3>
+      <p class="muted">Uses the currently selected compiled OpenAPI operation and its arguments. Brokered secrets are resolved only in the extension service worker after a fresh preview.</p>
+      <button id="session-preview-api" type="button">Preview with session authorization</button>
+      <pre id="session-api-preview" hidden></pre>
+      <label class="approval"><input id="session-api-approval" type="checkbox"> I approve this session-authorized API request exactly as previewed.</label>
+      <button id="session-execute-api" type="button" disabled>Execute session-authorized API request</button>
+      <pre id="session-api-result" hidden></pre>
+      <h3>Protected MCP</h3>
+      <p class="muted">Select a Bearer session credential. Protected modern MCP remains same-origin, redirects stay manual, ambient browser credentials remain omitted, and each execution is freshly previewed.</p>
+      <button id="session-list-mcp-tools" type="button">List protected MCP tools</button>
+      <button id="session-preview-mcp-tool" type="button">Preview protected MCP call</button>
+      <pre id="session-mcp-preview" hidden></pre>
+      <label class="approval"><input id="session-mcp-approval" type="checkbox"> I approve this protected MCP call exactly as previewed.</label>
+      <button id="session-execute-mcp-tool" type="button" disabled>Execute protected MCP call</button>
+      <pre id="session-mcp-result" hidden></pre>
+      <h3>Session tasks</h3>
+      <p class="muted">Task handles remain in session storage. Closing the popup no longer loses an active task, but KATA still never polls or resumes it automatically.</p>
+      <select id="session-task-list"></select>
+      <button id="session-refresh-task" type="button">Refresh selected task</button>
+      <button id="session-remove-task" type="button">Remove selected task from session</button>
+      <pre id="session-task-result" hidden></pre>
+      <label for="session-task-input-responses">Current task input responses (JSON)</label>
+      <textarea id="session-task-input-responses" rows="6" spellcheck="false">{}</textarea>
+      <button id="session-preview-task-update" type="button">Preview session task update</button>
+      <label class="approval"><input id="session-task-update-approval" type="checkbox"> I approve this task update exactly as previewed.</label>
+      <button id="session-execute-task-update" type="button" disabled>Execute session task update</button>
+      <button id="session-preview-task-cancel" type="button">Preview session task cancellation</button>
+      <label class="approval"><input id="session-task-cancel-approval" type="checkbox"> I approve this cooperative cancellation exactly as previewed.</label>
+      <button id="session-execute-task-cancel" type="button" disabled>Request session task cancellation</button>
+    </section>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="result" hidden>
       <h2>Observed runtime</h2>
@@ -104,5 +157,6 @@
     </section>
   </main>
   <script type="module" src="popup.js"></script>
+  <script type="module" src="session-popup.js"></script>
 </body>
 </html>
