@@ -100,3 +100,24 @@ test('runtime probe caps DOM traversal on very large applications and reports tr
   assert.equal(result.runtime.dom.maxInspectedNodes,128);
   assert.ok(childReads<=128);
 });
+
+test('runtime probe discovers iframe boundaries inside observable open shadow roots',()=>{
+  const shadowFrame={localName:'iframe',children:[],shadowRoot:null,contentDocument:{documentElement:{}}};
+  const shadowRoot={children:[shadowFrame]};
+  const shadowHost={localName:'app-shell',children:[],shadowRoot};
+  const document={
+    URL:'https://components.example.test/app',
+    modelContext:{registerTool(){}},
+    permissionsPolicy:{allowsFeature(){return true;}},
+    documentElement:{localName:'html',children:[shadowHost],shadowRoot:null},
+    querySelector(){return null;},
+    querySelectorAll(){return[];}
+  };
+  const window={location:{href:'https://components.example.test/app',origin:'https://components.example.test'}};window.top=window;
+  const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true});
+  assert.equal(result.runtime.dom.openShadowRoots,1);
+  assert.equal(result.runtime.dom.iframes,1);
+  assert.equal(result.runtime.dom.accessibleFrames,1);
+  assert.equal(result.runtime.dom.inaccessibleFrames,0);
+  assert.equal(result.runtime.dom.truncated,false);
+});
