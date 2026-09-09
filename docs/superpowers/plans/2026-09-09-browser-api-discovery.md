@@ -14,7 +14,7 @@
 
 - No arbitrary URL parameter or site crawling.
 - Same-origin description fetches use `credentials: "same-origin"`; cross-origin description fetches use `credentials: "omit"` and normal CORS.
-- API catalog discovery is limited to the current origin's `/.well-known/api-catalog` and rejects cross-origin final redirects.
+- API catalog discovery starts only at the current origin's `/.well-known/api-catalog`; normal browser redirects and CORS remain authoritative, including RFC 9727 publisher redirects to controlled domains.
 - Never invoke API operations or infer operation authorization/CORS/rate-limit/terms state.
 - Parse JSON OpenAPI 3.0/3.1/3.2; report YAML/unknown formats as unsupported.
 - Preserve AbortSignal through every fetch.
@@ -33,7 +33,7 @@
 
 - [ ] Add a test proving a declared same-origin OpenAPI 3.2 JSON document is fetched with same-origin credentials and yields bounded operation/security/streaming metadata.
 - [ ] Add a test proving cross-origin descriptions use omitted credentials and failed CORS remains a fetch outcome rather than a bypass.
-- [ ] Add a test proving the well-known API catalog is fetched only from the current origin and cross-origin catalog redirects are rejected.
+- [ ] Add a test proving the well-known API catalog request originates only at the current origin and that normal browser-authorized RFC 9727 redirects can lead to publisher-controlled catalogs without creating an arbitrary URL input.
 - [ ] Add a test proving YAML is reported unsupported rather than guessed.
 - [ ] Add a test proving AbortSignal is forwarded and cancellation aborts discovery.
 - [ ] Commit the tests and verify CI fails because `src/api-discovery.js` does not yet exist.
