@@ -14,7 +14,7 @@ test('extension background entry loads existing worker plus isolated session con
   const source=fs.readFileSync(entryPath,'utf8');
   assert.match(source,/import\s+['"]\.\/service-worker\.js['"]/);
   assert.match(source,/createSessionController/);
-  assert.match(source,/chrome\.storage\.session/);
+  assert.match(source,/(?:chrome|chromeApi)(?:\?\.)?\.storage(?:\?\.)?\.session/);
   assert.match(source,/message\?\.type\?\.startsWith\(['"]session-['"]\)/);
 });
 
