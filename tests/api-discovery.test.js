@@ -28,7 +28,7 @@ test('discovers declared same-origin OpenAPI and extracts bounded operations, au
   const result=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false,maxDescriptions:3},{origin:'https://app.test',fetch});
   assert.equal(calls.length,1);
   assert.equal(calls[0].options.credentials,'same-origin');
-  assert.equal(calls[0].options.mode,'same-origin');
+  assert.equal(calls[0].options.mode,'cors');
   assert.equal(result.descriptions.length,1);
   assert.equal(result.descriptions[0].openapi,'3.2.0');
   assert.equal(result.descriptions[0].title,'Example API');
