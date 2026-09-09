@@ -29,16 +29,16 @@ function observedProbe(){
   };
 }
 
-test('browser bridge is Manifest V3 with temporary active-tab access and no broad/sensitive permissions',()=>{
+test('browser bridge is Manifest V3 with temporary active-tab access plus session-only storage and no broad/sensitive permissions',()=>{
   const m=manifest();
   assert.equal(m.manifest_version,3);
-  assert.equal(Number(m.minimum_chrome_version),95);
-  assert.deepEqual([...m.permissions].sort(),['activeTab','scripting']);
+  assert.equal(Number(m.minimum_chrome_version),102);
+  assert.deepEqual([...m.permissions].sort(),['activeTab','scripting','storage']);
   assert.deepEqual(m.host_permissions,['https://kata-webmcp.vercel.app/*']);
   const serialized=JSON.stringify(m);
   assert.equal(serialized.includes('<all_urls>'),false);
   assert.equal(serialized.includes('https://*/'),false);
-  for(const forbidden of ['cookies','webRequest','debugger','history','downloads','nativeMessaging','clipboardRead','clipboardWrite'])assert.equal(m.permissions.includes(forbidden),false,`forbidden permission ${forbidden}`);
+  for(const forbidden of ['cookies','webRequest','debugger','history','downloads','nativeMessaging','clipboardRead','clipboardWrite','identity','alarms'])assert.equal(m.permissions.includes(forbidden),false,`forbidden permission ${forbidden}`);
   assert.equal(m.background?.type,'module');
   assert.equal(m.background?.service_worker,'service-worker.js');
   assert.equal(m.action?.default_popup,'popup.html');
