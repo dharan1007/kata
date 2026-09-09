@@ -80,12 +80,14 @@ function linkTargets(value,base){
   return out;
 }
 function parseCatalog(document,catalogUrl){
-  const sources=[];
+  const descriptionUrls=[],apiEndpoints=[],nestedCatalogs=[];
   for(const entry of Array.isArray(document?.linkset)?document.linkset:[]){
     const anchor=safeHttpUrl(entry?.anchor,catalogUrl)?.href??catalogUrl;
-    sources.push(...linkTargets(entry?.['service-desc'],anchor));
+    descriptionUrls.push(...linkTargets(entry?.['service-desc'],anchor));
+    apiEndpoints.push(...linkTargets(entry?.item,anchor));
+    nestedCatalogs.push(...linkTargets(entry?.['api-catalog'],anchor));
   }
-  return unique(sources);
+  return{descriptionUrls:unique(descriptionUrls),apiEndpoints:unique(apiEndpoints),nestedCatalogs:unique(nestedCatalogs)};
 }
 async function fetchText(url,origin,fetchFn,signal,accept){
   const sameOrigin=url.origin===origin;
@@ -112,19 +114,25 @@ export async function discoverBrowserApis(options={},runtime={}){
   const signal=options.signal,maxDescriptions=boundedInt(options.maxDescriptions,3,1,5),includeCatalog=options.includeWellKnownCatalog!==false;
   const sources=[];
   for(const raw of Array.isArray(options.declaredApiDescriptions)?options.declaredApiDescriptions:[]){const url=safeHttpUrl(raw,origin);if(url&&!sources.includes(url.href))sources.push(url.href);}
-  let catalog={status:includeCatalog?'not_checked':'disabled',url:null,finalUrl:null};
+  let catalog={status:includeCatalog?'not_checked':'disabled',url:null,finalUrl:null,apiEndpoints:[],nestedCatalogs:[]};
   if(includeCatalog){
     const catalogUrl=new URL('/.well-known/api-catalog',origin);
     const fetched=await fetchText(catalogUrl,origin,fetchFn,signal,'application/linkset+json, application/json;q=0.9');
-    catalog={status:fetched.ok?'ok':fetched.status,url:catalogUrl.href,finalUrl:fetched.finalUrl??null,...(!fetched.ok&&fetched.httpStatus?{httpStatus:fetched.httpStatus}:{})};
+    catalog={status:fetched.ok?'ok':fetched.status,url:catalogUrl.href,finalUrl:fetched.finalUrl??null,apiEndpoints:[],nestedCatalogs:[],...(!fetched.ok&&fetched.httpStatus?{httpStatus:fetched.httpStatus}:{})};
     if(fetched.ok){
       const format=formatOf(fetched.contentType,safeHttpUrl(fetched.finalUrl,catalogUrl.href)??catalogUrl,fetched.text);
       if(format==='json'){
-        try{for(const discovered of parseCatalog(JSON.parse(fetched.text),fetched.finalUrl??catalogUrl.href))if(!sources.includes(discovered))sources.push(discovered);}catch{catalog.status='invalid_json';}
+        try{
+          const parsedCatalog=parseCatalog(JSON.parse(fetched.text),fetched.finalUrl??catalogUrl.href);
+          catalog.apiEndpoints=parsedCatalog.apiEndpoints;
+          catalog.nestedCatalogs=parsedCatalog.nestedCatalogs;
+          for(const discovered of parsedCatalog.descriptionUrls)if(!sources.includes(discovered))sources.push(discovered);
+        }catch{catalog.status='invalid_json';}
       }else catalog.status='unsupported_format';
     }
   }
   const selected=sources.slice(0,maxDescriptions),resources=[],descriptions=[],operations=[],securityMap=new Map(),evidence=[];
+  if(catalog.status==='ok'&&(catalog.apiEndpoints.length||catalog.nestedCatalogs.length))evidence.push({code:'API_CATALOG_DISCOVERED',apiEndpointCount:catalog.apiEndpoints.length,nestedCatalogCount:catalog.nestedCatalogs.length});
   for(const source of selected){
     const url=safeHttpUrl(source,origin);if(!url)continue;
     const fetched=await fetchText(url,origin,fetchFn,signal,'application/openapi+json, application/vnd.oai.openapi+json, application/json, application/yaml;q=0.7, text/yaml;q=0.7');
