@@ -32,7 +32,7 @@ It does not dereference `$ref`, execute operations, submit credentials, infer au
 
 ## API catalog support
 
-The browser collector may fetch `/.well-known/api-catalog` from the current origin. For `application/linkset+json` / JSON Linkset responses it extracts `service-desc` targets and resolves relative targets against the catalog URL. The collector ignores unrelated link relations and deduplicates discovered descriptions. Redirects that leave the current origin are rejected for the well-known catalog.
+The browser collector may fetch `/.well-known/api-catalog` from the current origin. For `application/linkset+json` / JSON Linkset responses it extracts `service-desc` targets and resolves relative targets against the catalog entry's `anchor` when provided, otherwise against the final catalog URL. The collector ignores unrelated link relations and deduplicates discovered descriptions. RFC 9727 permits a publisher to redirect its well-known catalog to another controlled domain, so KATA follows normal browser redirects and CORS rather than rejecting a cross-origin final URL. Ambient credentials are not deliberately supplied to independently discovered cross-origin description resources; normal browser redirect credential rules and CSP/CORS remain authoritative.
 
 ## WebMCP surface
 
@@ -48,4 +48,4 @@ The collector never follows arbitrary crawl links, never reads closed shadow roo
 
 ## Verification
 
-Use test-first development. Tests must establish source restrictions, credential handling, API-catalog same-origin enforcement, OpenAPI 3.x parsing, bounded operation inventory, security/streaming extraction, unsupported YAML behavior, AbortSignal propagation, WebMCP registration, capability advertising, and production artifact closure. Run the complete release gate and CodeQL before merge.
+Use test-first development. Tests must establish source restrictions, credential handling, RFC 9727 catalog discovery and browser-governed redirects, OpenAPI 3.x parsing, bounded operation inventory, security/streaming extraction, unsupported YAML behavior, AbortSignal propagation, WebMCP registration, capability advertising, and production artifact closure. Run the complete release gate and CodeQL before merge.
