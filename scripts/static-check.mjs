@@ -49,7 +49,8 @@ for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api
 const packagedWorker=fs.readFileSync(path.join(dist,'extension/service-worker.js'),'utf8');
 for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js','mcp-adapter.js'])if(!packagedWorker.includes(`from './${module}'`))throw new Error(`Extension service worker does not import packaged canonical ${module}`);
 if(!packagedWorker.includes("world:'MAIN',func:executePageApiRequest"))throw new Error('Extension API execution must remain in the authorized page MAIN world');
-if(!packagedWorker.includes("credentials:'omit'")||!packagedWorker.includes("automaticRetries:false"))throw new Error('Extension MCP/API execution must preserve credential-free/no-auto-retry boundaries');
+const packagedMcpAdapter=fs.readFileSync(path.join(dist,'extension/mcp-adapter.js'),'utf8');
+if(!packagedMcpAdapter.includes("credentials:'omit'")||!packagedMcpAdapter.includes('automaticRetries:false')||!packagedMcpAdapter.includes("redirect:'manual'"))throw new Error('Canonical packaged MCP adapter must preserve credential-free/manual-redirect/no-auto-retry execution boundaries');
 
 const integrityBytes=fs.readFileSync(path.join(root,'dist/integrity.json'));
 const manifest=JSON.parse(integrityBytes.toString('utf8'));
