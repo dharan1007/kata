@@ -30,7 +30,7 @@ test('MCP 2026-07-28 reports HeaderMismatch before UnsupportedProtocolVersion wh
   });
 });
 
-test('MCP 2026-07-28 returns Invalid Params for an unsupported modern protocol revision', async () => {
+test('MCP 2026-07-28 returns UnsupportedProtocolVersion for an unsupported modern protocol revision', async () => {
   const requested = '2027-01-01';
   const response = await handleMcpRequest({
     headers: {
@@ -51,8 +51,7 @@ test('MCP 2026-07-28 returns Invalid Params for an unsupported modern protocol r
   });
 
   assert.equal(response.status, 400);
-  assert.equal(response.body.error.code, -32602);
-  assert.equal(response.body.error.message, 'Unsupported MCP protocol version');
+  assert.equal(response.body.error.code, -32022);
   assert.deepEqual(response.body.error.data, {
     supported: [MCP_VERSION, LEGACY_MCP_VERSION],
     requested
