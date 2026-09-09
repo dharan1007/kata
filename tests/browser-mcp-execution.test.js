@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {previewAuthorizedTabMcpTool,executeAuthorizedTabMcpTool,listAuthorizedTabMcpTools} from '../extension/service-worker.js';
+import {previewAuthorizedTabMcpTool,executeAuthorizedTabMcpTool,listAuthorizedTabMcpTools,previewAuthorizedTabMcpResume,executeAuthorizedTabMcpResume} from '../extension/service-worker.js';
 
 const tab={id:7,url:'https://example.com/app'};
 const tool={name:'lookup.user',description:'Lookup a user',inputSchema:{type:'object',properties:{id:{type:'string','x-mcp-header':'User-Id'}},required:['id'],additionalProperties:false},outputSchema:{type:'object',properties:{name:{type:'string'}},required:['name'],additionalProperties:false}};
@@ -36,4 +36,29 @@ test('authorization-protected MCP never enters tools/list or tools/call in the p
   await assert.rejects(()=>listAuthorizedTabMcpTools(tab,'/mcp',{}, {fetchImpl}),/authorization is required/i);
   assert.deepEqual(log.map(x=>x.body.method),['server/discover']);
   assert.equal(log[0].init.credentials,'omit');
+});
+
+test('active-tab MCP input_required round is separately previewed, re-discovered, and explicitly approved before resume',async()=>{
+  const log=[];
+  const fetchImpl=async(url,init)=>{
+    const body=JSON.parse(init.body);log.push({url,init,body});
+    if(body.method==='server/discover')return{ok:true,status:200,json:async()=>({jsonrpc:'2.0',id:'kata-mcp-discover',result:{resultType:'complete',supportedVersions:['2026-07-28'],capabilities:{tools:{}},serverInfo:{name:'Example MCP',version:'1.0.0'}}})};
+    if(body.method==='tools/list')return{ok:true,status:200,json:async()=>({jsonrpc:'2.0',id:body.id,result:{resultType:'complete',tools:[tool]}})};
+    if(body.method==='tools/call'&&!body.params.inputResponses)return{ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({jsonrpc:'2.0',id:body.id,result:{resultType:'input_required',inputRequests:{confirm:{method:'elicitation/create',params:{message:'Continue lookup?',requestedSchema:{type:'object',properties:{approved:{type:'boolean'}},required:['approved'],additionalProperties:false}}}},requestState:'opaque-server-state'}})};
+    if(body.method==='tools/call'&&body.params.inputResponses)return{ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({jsonrpc:'2.0',id:body.id,result:{resultType:'complete',structuredContent:{name:'Ada'},isError:false}})};
+    throw new Error(`Unexpected MCP method ${body.method}`);
+  };
+  const firstPreview=await previewAuthorizedTabMcpTool(tab,'/mcp','lookup.user',{id:'abc'},{},{fetchImpl});
+  const pending=await executeAuthorizedTabMcpTool(tab,'/mcp','lookup.user',{id:'abc'},firstPreview.previewFingerprint,{approved:true},{fetchImpl});
+  assert.equal(pending.continuation?.inputRequests?.confirm?.method,'elicitation/create');
+  const resumePreview=await previewAuthorizedTabMcpResume(tab,'/mcp','lookup.user',{id:'abc'},pending.continuation,{confirm:{action:'accept',content:{approved:true}}},{},{fetchImpl});
+  assert.equal(resumePreview.preview.round,2);
+  assert.equal(resumePreview.preview.requestState,'opaque-server-state');
+  const result=await executeAuthorizedTabMcpResume(tab,'/mcp','lookup.user',{id:'abc'},pending.continuation,{confirm:{action:'accept',content:{approved:true}}},resumePreview.previewFingerprint,{approved:true},{fetchImpl});
+  assert.equal(result.ok,true);
+  const resumed=log.at(-1);
+  assert.equal(resumed.body.params.requestState,'opaque-server-state');
+  assert.deepEqual(resumed.body.params.inputResponses,{confirm:{action:'accept',content:{approved:true}}});
+  assert.ok(log.filter(x=>x.body.method==='server/discover').length>=4);
+  assert.ok(log.filter(x=>x.body.method==='tools/list').length>=4);
 });
