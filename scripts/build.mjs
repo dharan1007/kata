@@ -23,11 +23,6 @@ let packagedWorker=workerSource;
 for(const [from,to] of rewrites){const next=packagedWorker.replace(from,to);if(next===packagedWorker)throw new Error(`Extension worker canonical import rewrite did not apply: ${from}`);packagedWorker=next;}
 await emit('extension/service-worker.js',Buffer.from(packagedWorker));
 for(const rel of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js','mcp-adapter.js'])await emit(`extension/${rel}`,await fs.readFile(path.join(root,'src',rel)));
-const schemaImport='../lib/shared/schema.js';
-const packagedMcp=await fs.readFile(path.join(out,'extension/mcp-adapter.js'),'utf8');
-if(packagedMcp.includes(schemaImport)){
-  await emit('extension/lib/shared/schema.js',await fs.readFile(path.join(root,'lib/shared/schema.js')));
-}
 
 const integrityBytes=Buffer.from(JSON.stringify(integrity,null,2));
 const integritySha256=createHash('sha256').update(integrityBytes).digest('hex');
