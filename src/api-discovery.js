@@ -4,6 +4,7 @@ const MAX_DESCRIPTION_BYTES=2*1024*1024;
 const MAX_OPERATIONS=250;
 
 function safeHttpUrl(raw,base){
+  if(raw===undefined||raw===null||raw==='')return null;
   try{
     const url=new URL(String(raw),base);
     if(!['http:','https:'].includes(url.protocol)||url.username||url.password)return null;
@@ -72,8 +73,10 @@ function parseOpenApiDocument(document,url){
   return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,security:topSecurity,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS},operations,securitySchemes};
 }
 function linkTargets(value,base){
+  if(value===undefined||value===null)return[];
   const items=Array.isArray(value)?value:[value],out=[];
   for(const item of items){
+    if(item===undefined||item===null)continue;
     const raw=typeof item==='string'?item:item?.href;
     const url=safeHttpUrl(raw,base);if(url)out.push(url.href);
   }
