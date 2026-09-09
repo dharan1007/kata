@@ -7,6 +7,7 @@ The project will prove that before growing into a long list of shallow integrati
 ## Now — make the canonical workflow substrate boringly reliable
 
 - Keep the production deployment workflow as strict as the local release gate; a failed promotion is a failed release even when tests are green.
+- Keep one semantic contract for every canonical tool across HTTP, MCP, WebMCP and model-native projections; browser-owned stateful conveniences must use explicit browser-scoped names rather than overload canonical names.
 - Expand OpenAlex normalization, timeout, retry, rate-limit and explicit-failure coverage.
 - Add more two-demonstration anti-unification fixtures, including negative/generalization-boundary cases.
 - Keep HTTP, OpenAI-style, Anthropic-style, Gemini-style, MCP and WebMCP schemas derived from one canonical registry.
