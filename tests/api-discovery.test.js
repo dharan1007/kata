@@ -52,23 +52,22 @@ test('uses omitted credentials for cross-origin descriptions and reports browser
   assert.ok(result.evidence.some(x=>x.code==='API_DESCRIPTION_FETCH_FAILED'));
 });
 
-test('discovers service-desc targets from the current-origin RFC 9727 catalog and rejects cross-origin final catalog redirects',async()=>{
+test('discovers service-desc targets from the RFC 9727 catalog and permits browser-authorized cross-origin catalog redirects without forwarding ambient credentials',async()=>{
   const calls=[];
-  const catalog={linkset:[{anchor:'https://app.test/', 'service-desc':[{href:'/openapi.json'},{href:'https://docs.vendor.test/api.json'}]}]};
+  const catalog={linkset:[{anchor:'https://publisher.test/', 'service-desc':[{href:'/openapi.json'},{href:'https://docs.vendor.test/api.json'}]}]};
   const fetch=async(url,options)=>{
     calls.push({url:String(url),options});
-    if(String(url).endsWith('/.well-known/api-catalog'))return response({url:'https://app.test/.well-known/api-catalog',contentType:'application/linkset+json',body:JSON.stringify(catalog)});
+    if(String(url).endsWith('/.well-known/api-catalog'))return response({url:'https://publisher.test/catalog.json',contentType:'application/linkset+json',body:JSON.stringify(catalog)});
     return response({url:String(url),body:JSON.stringify(OPENAPI)});
   };
   const result=await discoverBrowserApis({declaredApiDescriptions:[],includeWellKnownCatalog:true,maxDescriptions:4},{origin:'https://app.test',fetch});
   assert.equal(calls[0].url,'https://app.test/.well-known/api-catalog');
   assert.equal(calls[0].options.credentials,'same-origin');
-  assert.ok(result.sources.includes('https://app.test/openapi.json'));
+  assert.equal(calls[0].options.mode,'cors');
+  assert.equal(result.catalog.status,'ok');
+  assert.equal(result.catalog.finalUrl,'https://publisher.test/catalog.json');
+  assert.ok(result.sources.includes('https://publisher.test/openapi.json'));
   assert.ok(result.sources.includes('https://docs.vendor.test/api.json'));
-
-  const redirected=await discoverBrowserApis({declaredApiDescriptions:[],includeWellKnownCatalog:true},{origin:'https://app.test',fetch:async()=>response({url:'https://evil.test/catalog',contentType:'application/linkset+json',body:JSON.stringify(catalog)})});
-  assert.equal(redirected.catalog.status,'rejected_cross_origin_redirect');
-  assert.equal(redirected.sources.length,0);
 });
 
 test('reports YAML descriptions as unsupported instead of guessing a partial parse',async()=>{
