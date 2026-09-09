@@ -26,6 +26,7 @@ test('explicit cross-origin request keeps otherwise valid WebMCP path possible',
   assert.equal(result.status,'possible');
   assert.equal(result.primaryPath,'webmcp');
   assert.equal(result.blockers.some(x=>x.code==='WEBMCP_FROM_ORIGINS_REQUIRED'),false);
+  assert.equal(result.blockers.some(x=>x.code==='WEBMCP_CROSS_ORIGIN_UNVERIFIED'),false);
 });
 
 test('missing cross-origin request can fall back to a separately supported documented API',async()=>{
@@ -33,5 +34,34 @@ test('missing cross-origin request can fall back to a separately supported docum
   assert.equal(result.status,'possible');
   assert.equal(result.primaryPath,'server_api');
   assert.ok(result.blockers.some(x=>x.code==='WEBMCP_FROM_ORIGINS_REQUIRED'));
+  assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|evade|circumvent/);
+});
+
+test('omitted cross-origin discovery evidence cannot be treated as usable WebMCP',async()=>{
+  const result=await diagnose({...base});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'webmcp');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_CROSS_ORIGIN_UNVERIFIED'));
+});
+
+test('unknown tools Permissions Policy cannot be treated as usable cross-origin WebMCP',async()=>{
+  const result=await diagnose({...base,crossOriginRequest:'requested',toolsPermission:'unknown'});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'webmcp');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_CROSS_ORIGIN_UNVERIFIED'));
+});
+
+test('unknown producer exposure cannot be treated as usable cross-origin WebMCP',async()=>{
+  const result=await diagnose({...base,crossOriginRequest:'requested',originExposure:'unknown'});
+  assert.equal(result.status,'setup_required');
+  assert.equal(result.primaryPath,'webmcp');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_CROSS_ORIGIN_UNVERIFIED'));
+});
+
+test('unverified cross-origin WebMCP can use a separately established documented server API',async()=>{
+  const result=await diagnose({...base,crossOriginRequest:'unknown',api:'documented',auth:'authenticated',cors:'allowed',cspConnect:'allowed',serverSideApiAvailable:true});
+  assert.equal(result.status,'possible');
+  assert.equal(result.primaryPath,'server_api');
+  assert.ok(result.blockers.some(x=>x.code==='WEBMCP_CROSS_ORIGIN_UNVERIFIED'));
   assert.doesNotMatch(JSON.stringify(result).toLowerCase(),/bypass|evade|circumvent/);
 });
