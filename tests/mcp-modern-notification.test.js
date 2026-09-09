@@ -7,7 +7,7 @@ const metadata = {
   'io.modelcontextprotocol/clientCapabilities': {}
 };
 
-test('MCP 2026-07-28 notifications do not require routing headers whose presence is undefined by the current transport spec', async () => {
+test('MCP 2026-07-28 notifications reject a missing Mcp-Method routing header', async () => {
   let invoked = false;
   const registry = {
     list() { return []; },
@@ -25,8 +25,8 @@ test('MCP 2026-07-28 notifications do not require routing headers whose presence
     }
   }, {registry});
 
-  assert.equal(response.status, 202);
-  assert.equal(response.body, undefined);
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error.code, -32020);
   assert.equal(invoked, false);
 });
 
