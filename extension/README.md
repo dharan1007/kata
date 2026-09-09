@@ -1,112 +1,67 @@
 # KATA Interoperability Inspector
 
-This is a Manifest V3 companion extension for inspecting the real web app in the user's currently active tab and evaluating observed evidence through KATA's canonical interoperability engine.
+This Manifest V3 companion extension inspects the web app in the user's currently active tab and evaluates observed evidence through KATA's canonical interoperability engine.
 
 ## Build and load
 
-Run `npm run build`, then open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist/extension`.
+Run `npm run build`, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist/extension`.
 
-The source `extension/` directory is not itself the load-unpacked artifact because the build copies KATA's canonical runtime probe, API discovery parser, API agent-contract compiler, API execution module, and modern MCP adapter into the extension package and rewrites the service-worker imports to those packaged copies. The release integrity manifest covers all of them so browser, API, and MCP behavior cannot silently drift through an incomplete production artifact.
+The source `extension/` directory is not itself the load-unpacked artifact. The build copies KATA's canonical runtime probe, API discovery parser, API agent-contract compiler, API execution module, and modern MCP adapter into the extension package and rewrites service-worker imports to those packaged copies. The release integrity manifest covers the packaged modules so browser/API/MCP behavior cannot silently drift.
 
-## Permission model
+## Permission and security model
 
-The extension requests only:
+The extension requests only `activeTab`, `scripting`, and host access to `https://kata-webmcp.vercel.app/*`. It does not request `<all_urls>`, cookies, webRequest, debugger, history, downloads, native messaging, clipboard access, or persistent content scripts.
 
-- `activeTab` — temporary access to the current tab after the user invokes the extension;
-- `scripting` — execute canonical KATA inspection and bounded API execution functions in the authorized tab;
-- host access to `https://kata-webmcp.vercel.app/*` — send the bounded interoperability environment to KATA's diagnostic API.
+Target application access is bound to the explicitly authorized active tab. Remote MCP endpoints must be same-origin HTTPS; loopback HTTP is allowed only for local development. KATA does not bypass authentication, CAPTCHAs, bot defenses, CSP, CORS, Permissions Policy, rate limits, paywalls, or service terms.
 
-It does not request `<all_urls>`, cookies, webRequest, debugger, history, downloads, native messaging, clipboard access, or persistent content scripts.
+## Runtime and API interoperability
 
-## Runtime inspection
+**Inspect current tab** runs KATA's canonical runtime probe in the authorized top-level page. It observes only browser/runtime interoperability evidence exposed by the page, such as WebMCP availability, frame relationship, framework hints, open shadow-root topology, iframe topology, and declared machine-readable API descriptions.
 
-**Inspect current tab** runs KATA's canonical runtime probe in the explicitly authorized top-level page. It observes only runtime interoperability evidence the page/browser exposes, such as WebMCP availability, frame relationship, framework hints, open shadow-root topology, iframe topology and declared machine-readable API descriptions.
+**Compile discovered API tools** turns standards-declared OpenAPI operations into local model-ready candidate contracts. A same-origin operation can execute only after a fresh request preview and explicit execution action. The exact request contract is SHA-256 bound; redirects are rejected; requests and response bodies are bounded; there are no automatic retries; and credentials are never accepted as model arguments. Browser-managed same-origin credentials are eligible only when the declaring OpenAPI security scheme actually describes compatible cookie authentication.
 
-## API discovery, compilation and execution
-
-**Compile discovered API tools** takes standards-declared OpenAPI descriptions visible from the authorized tab and converts supported operations into local, model-ready candidate tool contracts. Compilation itself executes nothing and never accepts cookies, bearer tokens, API keys or `Authorization` as model-controlled input.
-
-A compiled operation can enter KATA's execution path only through **Preview exact request** followed by a separate **Execute previewed request** action. Before both preview and execution, KATA re-runs runtime/API discovery and recompiles the operation from the current page. The exact method, URL, declared non-sensitive headers, body, credential mode, redirect policy, timeout and response budget are SHA-256 fingerprinted. If the operation contract, arguments, page origin or preview changes, execution fails before the target request starts.
-
-Execution is deliberately narrower than discovery:
-
-- the final API URL must be same-origin with the explicitly authorized active tab;
-- target requests run in the page MAIN world so the site's browser session, CSP, CORS and Fetch behavior remain authoritative;
-- a contract with no declared OpenAPI security uses `credentials: omit`;
-- a contract declaring security may use only browser-managed `credentials: same-origin`; KATA never reads or returns those credentials and never creates an `Authorization` or `Cookie` header;
-- redirects are rejected;
-- there are no automatic retries, because KATA does not assume an operation is idempotent;
-- the default and hard timeout ceiling is 15 seconds;
-- response snapshots are bounded to 1 MiB and may be marked truncated; a truncated response is not falsely reported as a failed mutation because the server may already have committed it;
-- state-changing requests require an explicit approval checkbox after the fresh preview;
-- every execution action returns a local receipt bound to the preview fingerprint and target response metadata.
-
-If a protected API requires a bearer token, CSRF value or other application-managed credential that the browser does not automatically attach, KATA does not extract it from page/browser storage. The request will remain unauthorized until the service provides a supported integration/authorization mechanism.
-
-Compiled contracts, execution previews, response snapshots and receipts remain local to the extension. They are not uploaded to KATA by this workflow.
+Compiled API contracts, previews, bounded responses, and receipts stay local to the extension.
 
 ## MCP endpoint inspection
 
-**Inspect MCP endpoint** tests a developer-supplied path on the active tab's own origin. Remote endpoints must use HTTPS; cleartext HTTP is allowed only on loopback hosts for local development.
+**Inspect MCP endpoint** sends a credential-free `server/discover` request for MCP `2026-07-28`. HTTP 401 remains an authorization boundary. KATA may inspect same-origin RFC 9728 Protected Resource Metadata, but it does not contact the authorization server or begin OAuth. Legacy method-not-found is classified as a legacy candidate without performing a hidden `initialize` handshake.
 
-The inspector:
+When the endpoint is same-origin, modern, public, and advertises tools, **List public modern MCP tools** performs bounded `tools/list` pagination. KATA validates executable input schemas, `x-mcp-header` routing contracts, response limits, and transport policy. Tool annotations are treated as untrusted metadata.
 
-- sends one credential-free MCP `server/discover` request for protocol `2026-07-28`;
-- uses `credentials: omit`, `cache: no-store`, and manual redirect handling;
-- treats HTTP 401 as an authorization boundary rather than trying to defeat it;
-- may read only same-origin RFC 9728 Protected Resource Metadata named by the challenge;
-- records authorization-server identifiers as metadata but does not contact them or begin OAuth;
-- classifies JSON-RPC method-not-found as a legacy MCP candidate without performing an `initialize` handshake;
-- does not call tools, resources, prompts or another server capability during the inspection action;
-- never supplies cookies, bearer tokens, API keys or browser-storage credentials.
+Every `tools/call` is separately previewed, SHA-256 fingerprinted, explicitly approved, and preceded by fresh discovery/listing so contract drift invalidates stale approval. Credentials remain `omit`, redirects remain manual, and calls are never automatically retried.
 
-## Public modern MCP tool adapters
+## Multi-round input
 
-When inspection establishes all of the following — same-origin endpoint, protocol `2026-07-28`, no required authorization, and an advertised `tools` capability — KATA can enter a separate, explicit MCP tool workflow.
+Synchronous MCP `input_required` is supported through explicit user-driven rounds. Only `elicitation/create` is auto-renderable by this driver; URL elicitation, sampling, and roots are not auto-fulfilled. Each round gets a fresh preview and approval, the server's `requestState` remains opaque, only current-round `inputResponses` are sent, and the process is bounded to 10 rounds, 16 requests per round, and 64 KiB of opaque request state.
 
-**List public modern MCP tools** sends bounded credential-free `tools/list` requests. Pagination is capped, tool count is capped, cache evidence is retained locally, JSON and request-scoped SSE responses are supported, and malformed tool definitions are rejected independently instead of poisoning the entire inventory. KATA treats tool annotations as untrusted metadata.
+## MCP Tasks extension
 
-For Streamable HTTP tool definitions that use `x-mcp-header`, KATA validates the header-name contract, requires statically reachable supported primitive parameters, mirrors the value into `Mcp-Param-*`, and applies the MCP Base64 sentinel encoding when a string cannot be represented safely as a plain HTTP header value. Integer mirrored values must remain within the JavaScript safe-integer range.
+KATA supports the MCP `2026-07-28` Tasks extension identifier `io.modelcontextprotocol/tasks` for tools whose `execution.taskSupport` is `optional` or `required`.
 
-The executable adapter intentionally supports a bounded input-schema subset rather than pretending to implement all of JSON Schema 2020-12. Tools whose required input contract cannot be validated by that subset are excluded from executable inventory. Complex `outputSchema` values can remain visible, but receipts say explicitly when KATA could not validate them with its supported subset. Tools that require the MCP Tasks extension are excluded because this adapter does not negotiate or execute Tasks.
+Task support is deliberately explicit and bounded:
 
-Every tool call uses **Preview exact MCP call** followed by a separate approval and **Execute previewed MCP call**. Previewing creates a SHA-256 fingerprint over the endpoint, tool identity, arguments, input/output contract, mirrored routing headers and execution policy. Immediately before execution KATA re-runs `server/discover`, re-lists the live tool inventory, recompiles the tool, and regenerates the fingerprint. Any contract or argument drift fails before `tools/call` starts.
+- the Tasks client capability is advertised only on task-capable tool calls and task lifecycle requests;
+- a `resultType: "task"` response is surfaced as a local opaque task handle instead of being treated as a tool failure;
+- `tasks/get` is a one-shot, user-triggered refresh; KATA never polls in the background;
+- Streamable HTTP `tasks/get`, `tasks/update`, and `tasks/cancel` set `Mcp-Name` to the exact validated task ID and `Mcp-Method` to the task method;
+- task IDs are bounded to 4096 bytes and must be header-safe ASCII. They are never silently encoded or uploaded to KATA;
+- `tasks/update` accepts only responses for currently outstanding task `inputRequests`, and only bounded `elicitation/create` requests are user-fillable;
+- task input updates and cancellations each receive their own SHA-256-bound preview and explicit approval;
+- `tasks/cancel` is treated as cooperative cancellation intent. KATA does not claim the task is terminal until a later `tasks/get` establishes terminal state;
+- task requests use `credentials: omit`, manual redirects, the same 1 MiB response ceiling, and the same 15-second request-plus-body deadline as other MCP adapter traffic;
+- no `tasks/list` exists or is emulated;
+- task notifications/subscriptions are not enabled in this bounded driver;
+- completed task results are validated against the originating tool's supported `outputSchema` subset when available;
+- task handles, task input, previews, results, and receipts remain local to the extension.
 
-MCP 2026-07-28 `input_required` is supported through an explicitly driven multi-round flow. KATA does not answer input requests automatically. When a call returns `input_required`, the extension displays the current `inputRequests`, keeps the opaque `requestState` local, and requires the user to provide the current round `inputResponses`. **Preview resumed MCP round** re-runs `server/discover` and `tools/list`, validates the current elicitation response against the requested schema, and produces a new SHA-256-bound preview. **Execute resumed MCP round** requires a new explicit approval and echoes the server's opaque `requestState` unchanged. If the server returns another `input_required`, the same process repeats with a fresh preview and approval.
+The popup intentionally requires **Refresh task state** for every observation. If a task reaches `input_required`, the user must preview and approve the exact `tasks/update`. Cancellation likewise requires a separate preview and approval. This avoids turning a long-running server task into an unattended automation channel.
 
-The multi-round driver is intentionally bounded and conservative:
-
-- at most 10 total rounds are accepted;
-- at most 16 input requests are accepted per round;
-- opaque `requestState` is bounded to 64 KiB and is never interpreted as authorization or executable data;
-- only `elicitation/create` input requests are supported by this user-facing driver;
-- `accept`, `decline`, and `cancel` are explicit user choices; only `accept` may carry schema-validated content;
-- only the current round's input responses are sent on a resume; prior-round responses are not accumulated;
-- URL-mode elicitation is not followed automatically;
-- sampling and roots input requests are not auto-fulfilled;
-- every resumed round has a new preview fingerprint and explicit approval;
-- there is no automatic retry of the original or resumed tool call.
-
-MCP execution remains deliberately narrow:
-
-- only public modern same-origin endpoints can execute;
-- `credentials: omit` is mandatory for `server/discover`, `tools/list`, and `tools/call`;
-- no cookie, bearer token, API key, browser-storage value or ambient session credential is borrowed;
-- every tool invocation and every resumed input round requires explicit approval, regardless of tool annotations;
-- redirects are not automatically followed and calls are never automatically retried;
-- response bodies are bounded to 1 MiB for both JSON and SSE transport responses;
-- supported structured outputs are validated against KATA's declared validator subset and the receipt states the exact validation status;
-- OAuth-protected servers remain setup-required; this path does not start OAuth;
-- legacy MCP remains inspection-only;
-- Tasks-extension-required tools remain non-executable;
-- tool contracts, previews, `input_required` continuations, input responses, responses and receipts remain local to the extension.
-
-This design intentionally avoids a generic KATA server-side URL probe or arbitrary remote MCP executor, which would create SSRF, credential-forwarding and confused-deputy surfaces. The active-tab permission supplies the user authorization and confines discovery/execution to the website the user is currently viewing.
+Task handles are currently ephemeral extension state rather than a durable cloud queue. Closing the active popup can lose the local handle; KATA therefore does not claim crash-resumable or unattended task driving yet.
 
 ## What leaves the browser
 
-Only the normalized interoperability `environment` accepted by `kata_diagnose_web_interop` and the user-selected intent are sent to KATA. The current URL, framework hints, DOM topology, declared description URLs, compiled API tool contracts, API execution previews and receipts, MCP endpoint URL, MCP server identity/capabilities, authorization-server identifiers, MCP tool contracts/previews/receipts, `input_required` continuations, input responses, page text, form values, cookies, browser storage and credentials remain local to the extension.
+Only the normalized interoperability `environment` accepted by `kata_diagnose_web_interop` and the selected intent are sent to KATA. URL/origin details, framework hints, DOM topology, declared API-description URLs, compiled API contracts, API receipts, MCP endpoint/server identity, authorization metadata, MCP tool contracts, tool previews, `input_required` continuations, MCP task IDs/handles, task input, task previews, task results, and execution receipts remain local.
 
-## Restrictions
+## Deliberate non-goals
 
-Only top-level HTTP(S) tabs are inspected. Browser-internal pages and non-web schemes are rejected before injection. KATA does not use the extension to bypass authentication, CAPTCHAs, anti-automation controls, CSP, CORS, Permissions Policy, service terms, paywalls or rate limits. Unknown evidence remains unknown.
+The extension is not a generic remote URL executor, credential extractor, hidden OAuth client, background task scheduler, or security-control bypass. Protected MCP servers remain setup-required, legacy MCP remains inspection-only, and unknown evidence remains unknown.

@@ -73,6 +73,24 @@
           <label id="mcp-resume-approval-label" class="approval" hidden><input id="mcp-resume-approval" type="checkbox"> I approve this resumed MCP round exactly as previewed.</label>
           <button id="execute-mcp-resume" type="button" disabled>Execute resumed MCP round</button>
         </div>
+        <div id="mcp-task" hidden>
+          <h3>Long-running MCP task</h3>
+          <p class="muted">Task state stays local. KATA never polls in the background, never auto-submits task input, and never treats a cancellation request as proof the server has already stopped work.</p>
+          <pre id="mcp-task-state"></pre>
+          <button id="refresh-mcp-task" type="button">Refresh task state</button>
+          <div id="mcp-task-input" hidden>
+            <label for="mcp-task-input-responses">Task input responses (JSON)</label>
+            <textarea id="mcp-task-input-responses" rows="7" spellcheck="false">{}</textarea>
+            <button id="preview-mcp-task-update" type="button">Preview task input update</button>
+            <div id="mcp-task-update-preview" hidden></div>
+            <label id="mcp-task-update-approval-label" class="approval" hidden><input id="mcp-task-update-approval" type="checkbox"> I approve this task input update exactly as previewed.</label>
+            <button id="execute-mcp-task-update" type="button" disabled>Submit previewed task input</button>
+          </div>
+          <button id="preview-mcp-task-cancel" type="button">Preview task cancellation</button>
+          <div id="mcp-task-cancel-preview" hidden></div>
+          <label id="mcp-task-cancel-approval-label" class="approval" hidden><input id="mcp-task-cancel-approval" type="checkbox"> I approve this cooperative task cancellation request exactly as previewed.</label>
+          <button id="execute-mcp-task-cancel" type="button" disabled>Request task cancellation</button>
+        </div>
       </div>
     </section>
     <p id="status" role="status" aria-live="polite"></p>

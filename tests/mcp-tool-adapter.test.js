@@ -13,13 +13,15 @@ test('compiles valid MCP tools and rejects malformed x-mcp-header contracts inde
   assert.match(result.rejected[0].reason,/x-mcp-header/i);
 });
 
-test('rejects Tasks-required tools and does not pretend unsupported output schemas were validated',()=>{
+test('accepts Tasks-required tools while keeping unsupported output schemas explicitly unvalidated',()=>{
   const requiredTask={...tool,name:'async.only',execution:{taskSupport:'required'}};
   const complexOutput={...tool,name:'complex.output',outputSchema:{oneOf:[{type:'string'},{type:'number'}]}};
   const result=compileMcpToolInventory([requiredTask,complexOutput]);
-  assert.deepEqual(result.tools.map(x=>x.name),['complex.output']);
-  assert.match(result.rejected[0].reason,/Tasks extension/i);
-  assert.equal(result.tools[0].outputSchemaValidation,'unsupported-schema');
+  assert.deepEqual(result.tools.map(x=>x.name),['async.only','complex.output']);
+  assert.equal(result.rejected.length,0);
+  assert.equal(result.tools[0].taskSupport,'required');
+  assert.equal(result.tools[0].execution.tasks,'explicit-manual-lifecycle');
+  assert.equal(result.tools[1].outputSchemaValidation,'unsupported-schema');
 });
 
 test('builds a preview-bound tools/call with MCP routing and mirrored primitive headers',async()=>{
