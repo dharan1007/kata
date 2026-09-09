@@ -50,12 +50,14 @@ test('canonical WebMCP execution delegates to the canonical invoke path without 
   registry.dispose();
 });
 
-test('browser-owned inspection and stateful actions use explicit browser-scoped names',async()=>{
+test('browser-owned inspection, API discovery and stateful actions use explicit browser-scoped names',async()=>{
   const {runtime,registered,seen}=makeRuntime();
   const registry=createWebMcpRegistry(runtime);await registry.refresh();
   const tools=byName(registered);
-  for(const name of ['kata_browser_inspect_runtime','kata_browser_search_and_load_research','kata_browser_workspace_summary','kata_browser_list_automations','kata_browser_run_saved_automation','kata_browser_list_learned_tools'])assert.ok(tools.has(name),`missing ${name}`);
+  for(const name of ['kata_browser_inspect_runtime','kata_browser_discover_api','kata_browser_search_and_load_research','kata_browser_workspace_summary','kata_browser_list_automations','kata_browser_run_saved_automation','kata_browser_list_learned_tools'])assert.ok(tools.has(name),`missing ${name}`);
   assert.equal(tools.get('kata_browser_inspect_runtime').annotations.readOnlyHint,true);
+  assert.equal(tools.get('kata_browser_discover_api').annotations.readOnlyHint,true);
+  assert.deepEqual(tools.get('kata_browser_discover_api').inputSchema.required,[]);
   const controller=new AbortController();
   await tools.get('kata_browser_search_and_load_research').execute({query:'web agents',limit:5},{signal:controller.signal});
   assert.equal(seen.browserSearch.length,1);
@@ -70,6 +72,7 @@ test('learned tools cannot shadow canonical or browser-owned tool names',async()
     {name:'kata_search_research',description:'collision',inputSchema:{type:'object',properties:{},additionalProperties:false}},
     {name:'kata_browser_workspace_summary',description:'collision',inputSchema:{type:'object',properties:{},additionalProperties:false}},
     {name:'kata_browser_inspect_runtime',description:'collision',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+    {name:'kata_browser_discover_api',description:'collision',inputSchema:{type:'object',properties:{},additionalProperties:false}},
     {name:'learned_safe',description:'safe',inputSchema:{type:'object',properties:{},additionalProperties:false}}
   ];
   const registry=createWebMcpRegistry(runtime,status=>statuses.push(status));await registry.refresh();
@@ -78,6 +81,7 @@ test('learned tools cannot shadow canonical or browser-owned tool names',async()
   assert.equal(registered.filter(x=>x.tool.name==='kata_search_research').length,1);
   assert.equal(registered.filter(x=>x.tool.name==='kata_browser_workspace_summary').length,1);
   assert.equal(registered.filter(x=>x.tool.name==='kata_browser_inspect_runtime').length,1);
-  assert.deepEqual(statuses.at(-1).collisions,['kata_browser_inspect_runtime','kata_browser_workspace_summary','kata_search_research']);
+  assert.equal(registered.filter(x=>x.tool.name==='kata_browser_discover_api').length,1);
+  assert.deepEqual(statuses.at(-1).collisions,['kata_browser_discover_api','kata_browser_inspect_runtime','kata_browser_workspace_summary','kata_search_research']);
   registry.dispose();
 });
