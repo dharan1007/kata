@@ -52,6 +52,7 @@ function inputSchemaFor(operation){
   return{type:'object',properties,...(required.length?{required}:{}),additionalProperties:false};
 }
 function hasUnsupportedRequiredParameter(operation){
+  if(operation?.hasUnresolvedRequiredInputs)return true;
   for(const parameter of Array.isArray(operation.parameters)?operation.parameters:[]){
     if(!parameter?.required)continue;
     if(!PARAM_LOCATIONS.has(parameter.in))return true;
