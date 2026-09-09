@@ -62,6 +62,17 @@
         <label id="mcp-approval-label" class="approval" hidden><input id="mcp-execution-approval" type="checkbox"> I approve this MCP tool call exactly as previewed.</label>
         <button id="execute-mcp-tool" type="button" disabled>Execute previewed MCP call</button>
         <div id="mcp-execution" hidden></div>
+        <div id="mcp-continuation" hidden>
+          <h3>Input required to continue</h3>
+          <p class="muted">KATA supports only MCP form elicitation here. It never answers the server automatically. Review the server request, provide exactly this round's response, preview it, and approve the continuation separately.</p>
+          <div id="mcp-input-requests"></div>
+          <label for="mcp-input-responses">Current-round inputResponses (JSON)</label>
+          <textarea id="mcp-input-responses" rows="8" spellcheck="false">{}</textarea>
+          <button id="preview-mcp-continuation" type="button">Preview continuation</button>
+          <div id="mcp-continuation-preview" hidden></div>
+          <label id="mcp-continuation-approval-label" class="approval" hidden><input id="mcp-continuation-approval" type="checkbox"> I approve this continuation round exactly as previewed.</label>
+          <button id="execute-mcp-continuation" type="button" disabled>Continue MCP call</button>
+        </div>
       </div>
     </section>
     <p id="status" role="status" aria-live="polite"></p>
