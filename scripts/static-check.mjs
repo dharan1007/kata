@@ -20,6 +20,17 @@ const expected=['/dashboard','/research','/automations','/teach','/tools','/deve
 const rewrites=new Set(config.rewrites.map(x=>x.source));
 for(const r of expected)if(!rewrites.has(r))throw new Error(`Missing product rewrite ${r}`);
 
+const dist=path.join(root,'dist');
+const distJs=walk(dist).filter(f=>f.endsWith('.js'));
+for(const file of distJs){
+  const text=fs.readFileSync(file,'utf8');
+  const refs=[...text.matchAll(/(?:from\s*|import\s*)['"](\.{1,2}\/[^'"]+)['"]/g)].map(m=>m[1]);
+  for(const ref of refs){
+    const target=path.resolve(path.dirname(file),ref);
+    if(!target.startsWith(`${dist}${path.sep}`)||!fs.existsSync(target))throw new Error(`Broken production module import ${path.relative(dist,file)} -> ${ref}`);
+  }
+}
+
 const integrityBytes=fs.readFileSync(path.join(root,'dist/integrity.json'));
 const manifest=JSON.parse(integrityBytes.toString('utf8'));
 for(const [rel,meta] of Object.entries(manifest.assets)){
@@ -39,4 +50,4 @@ if(integrityEvidence?.path!=='/integrity.json')throw new Error('Release contract
 if(integrityEvidence?.sha256!==manifestSha256)throw new Error('Release contract does not bind the emitted integrity manifest');
 if(integrityEvidence?.bytes!==integrityBytes.length)throw new Error('Release contract integrity byte count mismatch');
 
-console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, source provenance ${release.source?.provenance}, integrity evidence bound.`);
+console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, ${distJs.length} production modules import-resolved, source provenance ${release.source?.provenance}, integrity evidence bound.`);
