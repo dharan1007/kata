@@ -23,6 +23,11 @@
       <option value="connect_mcp">Connect MCP</option>
     </select>
     <button id="inspect" type="button">Inspect current tab</button>
+    <section class="api-compiler">
+      <h2>API agent contracts</h2>
+      <button id="compile-api-tools" type="button">Compile discovered API tools</button>
+      <p class="muted">Creates local preview-only agent contracts from standards-declared OpenAPI. It does not call API operations, collect credentials, or fetch external component refs.</p>
+    </section>
     <section class="mcp-probe">
       <label for="mcp-endpoint">MCP endpoint on this site</label>
       <input id="mcp-endpoint" value="/mcp" autocomplete="off" spellcheck="false">
@@ -37,6 +42,10 @@
       <div id="diagnosis"></div>
       <h2>Restrictions and setup</h2>
       <ul id="blockers"></ul>
+    </section>
+    <section id="api-tools-result" hidden>
+      <h2>Compiled API tools</h2>
+      <div id="api-tools-summary"></div>
     </section>
     <section id="mcp-result" hidden>
       <h2>MCP discovery</h2>

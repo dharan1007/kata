@@ -2,6 +2,7 @@ const HTTP_METHODS=['get','put','post','delete','options','head','patch','trace'
 const STREAMING_MEDIA=new Set(['text/event-stream','application/jsonl','application/json-seq']);
 const MAX_DESCRIPTION_BYTES=2*1024*1024;
 const MAX_OPERATIONS=250;
+const MAX_SCHEMA_REF_DEPTH=8;
 
 function safeHttpUrl(raw,base){
   if(raw===undefined||raw===null||raw==='')return null;
@@ -30,14 +31,100 @@ function streamingMedia(operation){
   for(const response of Object.values(operation?.responses??{}))for(const type of Object.keys(response?.content??{}))if(STREAMING_MEDIA.has(type))media.push(type);
   return unique(media).sort();
 }
-function operationRecord(method,path,operation,topSecurity){
+function localRef(raw,prefix){
+  if(typeof raw!=='string'||!raw.startsWith(prefix))return null;
+  const key=raw.slice(prefix.length);
+  if(!key||key.includes('/')||key.includes('~'))return null;
+  try{return decodeURIComponent(key);}catch{return null;}
+}
+function resolveSchema(schema,document,depth=0,seen=new Set()){
+  if(!schema||typeof schema!=='object'||Array.isArray(schema))return{schema:null,unresolved:true};
+  if(depth>MAX_SCHEMA_REF_DEPTH)return{schema:null,unresolved:true};
+  if(typeof schema.$ref==='string'){
+    const key=localRef(schema.$ref,'#/components/schemas/');
+    if(!key||seen.has(key))return{schema:null,unresolved:true};
+    const target=document.components?.schemas?.[key];
+    if(!target||typeof target!=='object')return{schema:null,unresolved:true};
+    const next=new Set(seen);next.add(key);
+    return resolveSchema(target,document,depth+1,next);
+  }
+  const out={};let unresolved=false;
+  for(const [key,value] of Object.entries(schema)){
+    if(key==='$ref')continue;
+    if(key==='properties'&&value&&typeof value==='object'&&!Array.isArray(value)){
+      const properties={};
+      for(const [name,property] of Object.entries(value)){
+        const resolved=resolveSchema(property,document,depth+1,new Set(seen));
+        if(resolved.unresolved){unresolved=true;continue;}
+        properties[name]=resolved.schema;
+      }
+      out.properties=properties;continue;
+    }
+    if(key==='items'&&value&&typeof value==='object'){
+      const resolved=resolveSchema(value,document,depth+1,new Set(seen));
+      if(resolved.unresolved)unresolved=true;else out.items=resolved.schema;
+      continue;
+    }
+    if(['allOf','anyOf','oneOf','prefixItems'].includes(key)&&Array.isArray(value)){
+      const resolvedItems=[];
+      for(const item of value){const resolved=resolveSchema(item,document,depth+1,new Set(seen));if(resolved.unresolved)unresolved=true;else resolvedItems.push(resolved.schema);}
+      out[key]=resolvedItems;continue;
+    }
+    if(key==='additionalProperties'&&value&&typeof value==='object'){
+      const resolved=resolveSchema(value,document,depth+1,new Set(seen));if(resolved.unresolved)unresolved=true;else out.additionalProperties=resolved.schema;continue;
+    }
+    out[key]=structuredClone(value);
+  }
+  const required=Array.isArray(out.required)?out.required.filter(x=>typeof x==='string'):[];
+  if(required.length&&out.properties){for(const name of required)if(!Object.hasOwn(out.properties,name))unresolved=true;}
+  return{schema:out,unresolved};
+}
+function resolveParameter(parameter,document){
+  let source=parameter;
+  if(parameter&&typeof parameter==='object'&&typeof parameter.$ref==='string'){
+    const key=localRef(parameter.$ref,'#/components/parameters/');
+    if(!key)return{parameter:null,unresolved:true};
+    source=document.components?.parameters?.[key];
+  }
+  if(!source||typeof source!=='object'||Array.isArray(source)||typeof source.name!=='string'||typeof source.in!=='string')return{parameter:null,unresolved:true};
+  if(source.schema){
+    const resolved=resolveSchema(source.schema,document);
+    return{parameter:{name:source.name,in:source.in,required:Boolean(source.required),style:typeof source.style==='string'?source.style:null,explode:typeof source.explode==='boolean'?source.explode:null,schema:resolved.schema},unresolved:resolved.unresolved||!resolved.schema};
+  }
+  return{parameter:{name:source.name,in:source.in,required:Boolean(source.required),style:typeof source.style==='string'?source.style:null,explode:typeof source.explode==='boolean'?source.explode:null,schema:null},unresolved:true};
+}
+function mergedParameters(pathItem,operation,document){
+  const map=new Map();let unresolvedRequired=false;
+  const consume=list=>{for(const raw of Array.isArray(list)?list:[]){const resolved=resolveParameter(raw,document);if(resolved.parameter){map.set(`${resolved.parameter.in}:${resolved.parameter.name}`,resolved.parameter);if(resolved.unresolved&&resolved.parameter.required)unresolvedRequired=true;}else unresolvedRequired=true;}};
+  consume(pathItem?.parameters);consume(operation?.parameters);
+  return{parameters:[...map.values()],unresolvedRequired};
+}
+function resolveRequestBody(requestBody,document){
+  if(requestBody===undefined)return{requestBody:null,unresolvedRequired:false};
+  let source=requestBody;
+  if(requestBody&&typeof requestBody==='object'&&typeof requestBody.$ref==='string'){
+    const key=localRef(requestBody.$ref,'#/components/requestBodies/');
+    if(!key)return{requestBody:null,unresolvedRequired:true};
+    source=document.components?.requestBodies?.[key];
+  }
+  if(!source||typeof source!=='object'||Array.isArray(source))return{requestBody:null,unresolvedRequired:true};
+  const required=Boolean(source.required),media=source.content?.['application/json'];
+  if(!media?.schema)return{requestBody:{required,contentType:null,schema:null},unresolvedRequired:required};
+  const resolved=resolveSchema(media.schema,document);
+  return{requestBody:{required,contentType:'application/json',schema:resolved.schema},unresolvedRequired:required&&resolved.unresolved};
+}
+function operationRecord(method,path,pathItem,operation,topSecurity,document){
+  const parameters=mergedParameters(pathItem,operation,document),body=resolveRequestBody(operation.requestBody,document);
   return{
     method,path,
     operationId:typeof operation.operationId==='string'?operation.operationId:null,
     summary:typeof operation.summary==='string'?operation.summary:null,
     tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],
     security:Object.hasOwn(operation,'security')?securityNames(operation.security):topSecurity,
-    streamingMedia:streamingMedia(operation)
+    streamingMedia:streamingMedia(operation),
+    parameters:parameters.parameters,
+    requestBody:body.requestBody,
+    hasUnresolvedRequiredInputs:Boolean(parameters.unresolvedRequired||body.unresolvedRequired)
   };
 }
 function parseOpenApiDocument(document,url){
@@ -49,14 +136,14 @@ function parseOpenApiDocument(document,url){
     if(!pathItem||typeof pathItem!=='object')continue;
     for(const method of HTTP_METHODS){
       const operation=pathItem[method];if(!operation||typeof operation!=='object')continue;
-      operations.push(operationRecord(method.toUpperCase(),path,operation,topSecurity));
+      operations.push(operationRecord(method.toUpperCase(),path,pathItem,operation,topSecurity,document));
       if(operations.length>=MAX_OPERATIONS)break outer;
     }
     if(oas32&&pathItem.additionalOperations&&typeof pathItem.additionalOperations==='object'&&!Array.isArray(pathItem.additionalOperations)){
       for(const [method,operation] of Object.entries(pathItem.additionalOperations)){
         if(!method||!operation||typeof operation!=='object'||Array.isArray(operation))continue;
         if(HTTP_METHODS.includes(method.toLowerCase()))continue;
-        operations.push(operationRecord(method,path,operation,topSecurity));
+        operations.push(operationRecord(method,path,pathItem,operation,topSecurity,document));
         if(operations.length>=MAX_OPERATIONS)break outer;
       }
     }
@@ -153,5 +240,5 @@ export async function discoverBrowserApis(options={},runtime={}){
   }
   const securitySchemes=[...securityMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const environmentPatch=descriptions.length?{api:'documented'}:{};
-  return{sources:selected,catalog,resources,descriptions,operations,securitySchemes,evidence,environmentPatch,limits:{maxDescriptions,maxOperationsPerDescription:MAX_OPERATIONS,maxDescriptionBytes:MAX_DESCRIPTION_BYTES}};
+  return{sources:selected,catalog,resources,descriptions,operations,securitySchemes,evidence,environmentPatch,limits:{maxDescriptions,maxOperationsPerDescription:MAX_OPERATIONS,maxDescriptionBytes:MAX_DESCRIPTION_BYTES,maxSchemaRefDepth:MAX_SCHEMA_REF_DEPTH}};
 }
