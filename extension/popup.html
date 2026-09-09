@@ -26,7 +26,19 @@
     <section class="api-compiler">
       <h2>API agent contracts</h2>
       <button id="compile-api-tools" type="button">Compile discovered API tools</button>
-      <p class="muted">Creates local preview-only agent contracts from standards-declared OpenAPI. It does not call API operations, collect credentials, or fetch external component refs.</p>
+      <p class="muted">Discovers standards-declared OpenAPI and creates local agent contracts. Execution is available only for a freshly re-discovered same-origin operation after an exact request preview and a second explicit action. KATA never asks you to paste cookies, API keys, or bearer tokens.</p>
+      <div id="api-tools-result" hidden>
+        <div id="api-tools-summary"></div>
+        <label for="api-operation">Operation</label>
+        <select id="api-operation"></select>
+        <label for="api-arguments">Arguments (JSON)</label>
+        <textarea id="api-arguments" rows="6" spellcheck="false">{}</textarea>
+        <button id="preview-api-request" type="button" disabled>Preview exact request</button>
+        <div id="api-preview-result" hidden></div>
+        <label id="api-approval-label" class="approval" hidden><input id="api-execution-approval" type="checkbox"> I approve this state-changing request exactly as previewed.</label>
+        <button id="execute-api-request" type="button" disabled>Execute previewed request</button>
+        <div id="api-execution-result" hidden></div>
+      </div>
     </section>
     <section class="mcp-probe">
       <label for="mcp-endpoint">MCP endpoint on this site</label>
@@ -42,10 +54,6 @@
       <div id="diagnosis"></div>
       <h2>Restrictions and setup</h2>
       <ul id="blockers"></ul>
-    </section>
-    <section id="api-tools-result" hidden>
-      <h2>Compiled API tools</h2>
-      <div id="api-tools-summary"></div>
     </section>
     <section id="mcp-result" hidden>
       <h2>MCP discovery</h2>
