@@ -5,7 +5,7 @@ import {toolDefinitions} from '../lib/server/tools.js';
 
 function res(){return{statusCode:200,headers:{},body:null,status(n){this.statusCode=n;return this;},setHeader(k,v){this.headers[k.toLowerCase()]=v;},json(v){this.body=v;return this;},end(v){this.body=v;return this;}};}
 
-test('/api/capabilities publishes canonical WebMCP parity, runtime probing and explicit browser-owned tools',async()=>{
+test('/api/capabilities publishes canonical WebMCP parity, runtime probing, API discovery and explicit browser-owned tools',async()=>{
   const r=res();await capabilities({method:'GET',headers:{}},r);
   const webmcp=r.body.capabilities.webmcp;
   assert.equal(r.statusCode,200);
@@ -15,9 +15,13 @@ test('/api/capabilities publishes canonical WebMCP parity, runtime probing and e
   assert.deepEqual(webmcp.canonicalTools,toolDefinitions.map(t=>t.name));
   assert.equal(webmcp.browserRuntimeProbe,true);
   assert.equal(webmcp.browserRuntimeProbeTool,'kata_browser_inspect_runtime');
+  assert.equal(webmcp.browserApiDiscovery,true);
+  assert.equal(webmcp.browserApiDiscoveryTool,'kata_browser_discover_api');
+  assert.deepEqual(webmcp.apiDescriptionDiscovery,{sources:['document-service-desc','rfc9727-api-catalog'],openapi:['3.0','3.1','3.2'],formats:['json'],executesOperations:false,arbitraryUrlInput:false});
   assert.equal(webmcp.browserToolPrefix,'kata_browser_');
   assert.deepEqual(webmcp.browserTools,[
     'kata_browser_inspect_runtime',
+    'kata_browser_discover_api',
     'kata_browser_search_and_load_research',
     'kata_browser_workspace_summary',
     'kata_browser_list_automations',
