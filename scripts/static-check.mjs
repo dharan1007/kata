@@ -41,11 +41,13 @@ for(const file of distJs){
     if(!target.startsWith(`${dist}${path.sep}`)||!fs.existsSync(target))throw new Error(`Broken production module import ${path.relative(dist,file)} -> ${ref}`);
   }
 }
-const packagedProbe=fs.readFileSync(path.join(dist,'extension/runtime-probe.js'),'utf8');
-const canonicalProbe=fs.readFileSync(path.join(root,'src/runtime-probe.js'),'utf8');
-if(packagedProbe!==canonicalProbe)throw new Error('Extension runtime probe drifted from canonical browser probe');
+for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js']){
+  const packaged=fs.readFileSync(path.join(dist,'extension',module),'utf8');
+  const canonical=fs.readFileSync(path.join(root,'src',module),'utf8');
+  if(packaged!==canonical)throw new Error(`Extension ${module} drifted from canonical browser module`);
+}
 const packagedWorker=fs.readFileSync(path.join(dist,'extension/service-worker.js'),'utf8');
-if(!packagedWorker.includes("from './runtime-probe.js'"))throw new Error('Extension service worker does not import packaged canonical runtime probe');
+for(const module of ['runtime-probe.js','api-discovery.js','api-adapter.js'])if(!packagedWorker.includes(`from './${module}'`))throw new Error(`Extension service worker does not import packaged canonical ${module}`);
 
 const integrityBytes=fs.readFileSync(path.join(root,'dist/integrity.json'));
 const manifest=JSON.parse(integrityBytes.toString('utf8'));
@@ -54,7 +56,8 @@ for(const [rel,meta] of Object.entries(manifest.assets)){
   const sha=createHash('sha256').update(b).digest('hex');
   if(sha!==meta.sha256)throw new Error(`Integrity mismatch ${rel}`);
 }
-for(const requiredExtensionAsset of ['/extension/manifest.json','/extension/service-worker.js','/extension/runtime-probe.js','/extension/popup.html','/extension/popup.js','/extension/popup.css'])if(!manifest.assets[requiredExtensionAsset])throw new Error(`Extension asset not integrity-bound: ${requiredExtensionAsset}`);
+for(const requiredExtensionAsset of ['/extension/manifest.json','/extension/service-worker.js','/extension/runtime-probe.js','/extension/api-discovery.js','/extension/api-adapter.js','/extension/popup.html','/extension/popup.js','/extension/popup.css'])if(!manifest.assets[requiredExtensionAsset])throw new Error(`Extension asset not integrity-bound: ${requiredExtensionAsset}`);
+for(const requiredWebAsset of ['/src/api-discovery.js','/src/api-adapter.js'])if(!manifest.assets[requiredWebAsset])throw new Error(`Web interoperability asset not integrity-bound: ${requiredWebAsset}`);
 
 const release=JSON.parse(fs.readFileSync(path.join(root,'dist/release.json'),'utf8'));
 if(release.schemaVersion!==2||release.service!=='kata-webmcp'||release.version!=='3.0.0')throw new Error('Invalid release provenance contract');
@@ -67,4 +70,4 @@ if(integrityEvidence?.path!=='/integrity.json')throw new Error('Release contract
 if(integrityEvidence?.sha256!==manifestSha256)throw new Error('Release contract does not bind the emitted integrity manifest');
 if(integrityEvidence?.bytes!==integrityBytes.length)throw new Error('Release contract integrity byte count mismatch');
 
-console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, ${distJs.length} production modules import-resolved, active-tab extension permission/probe parity enforced, source provenance ${release.source?.provenance}, integrity evidence bound.`);
+console.log(`Static/security check passed: ${js.length} JS modules, ${expected.length+1} product routes, ${Object.keys(manifest.assets).length} integrity assets, ${distJs.length} production modules import-resolved, active-tab extension permission/runtime/API compiler parity enforced, source provenance ${release.source?.provenance}, integrity evidence bound.`);
