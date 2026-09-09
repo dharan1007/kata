@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSessionBroker} from '../extension/session-broker.js';
+import {createSessionApiBroker} from '../extension/session-api-broker.js';
 
 const ORIGIN='https://app.test';
 const TAB={id:41,url:`${ORIGIN}/account`};
@@ -18,16 +19,17 @@ test('active-tab protected API preview uses redacted session descriptors and ext
     if(url===`${ORIGIN}/api/me`){assert.equal(init.headers.Authorization,'Bearer session-secret');assert.equal(init.credentials,'omit');return response({},url);}
     throw new Error(`unexpected fetch ${url}`);
   };
-  const broker=createSessionBroker({storageArea:storageArea(),cryptoImpl:cryptoStub(),fetchImpl,chromeApi:chromeApi(),now:()=>1700000000000});
-  const descriptor=await broker.vault.putCredential({origin:ORIGIN,kind:'bearer-token',schemeName:'BearerAuth',secret:'session-secret',scopes:['read']});
-  const preview=await broker.previewApi(TAB,'getMe',{}, {includeWellKnownCatalog:false});
+  const session=createSessionBroker({storageArea:storageArea(),cryptoImpl:cryptoStub(),fetchImpl,now:()=>1700000000000});
+  const api=createSessionApiBroker({vault:session.vault,cryptoImpl:cryptoStub(),fetchImpl,chromeApi:chromeApi()});
+  await session.vault.putCredential({origin:ORIGIN,kind:'bearer-token',schemeName:'BearerAuth',secret:'session-secret',scopes:['read']});
+  const preview=await api.previewApi(TAB,'getMe',{}, {includeWellKnownCatalog:false});
   assert.equal(preview.preview.readyToExecute,true);
   assert.equal(preview.preview.authorizationStrategy,'brokered');
   assert.equal(preview.preview.executionContext,'extension-service-worker');
   assert.equal(JSON.stringify(preview).includes('session-secret'),false);
   assert.equal(calls.some(call=>call.init.headers.Authorization),false,'preview must not resolve/send the raw secret');
-  await assert.rejects(()=>broker.executeApi(TAB,'getMe',{},preview.previewFingerprint,{approved:false,includeWellKnownCatalog:false}),/approval/i);
-  const result=await broker.executeApi(TAB,'getMe',{},preview.previewFingerprint,{approved:true,includeWellKnownCatalog:false});
+  await assert.rejects(()=>api.executeApi(TAB,'getMe',{},preview.previewFingerprint,{approved:false,includeWellKnownCatalog:false}),/approval/i);
+  const result=await api.executeApi(TAB,'getMe',{},preview.previewFingerprint,{approved:true,includeWellKnownCatalog:false});
   assert.equal(result.ok,true);
   assert.equal(JSON.stringify(result).includes('session-secret'),false);
   assert.equal(calls.filter(call=>call.url===`${ORIGIN}/api/me`).length,1);
@@ -36,9 +38,10 @@ test('active-tab protected API preview uses redacted session descriptors and ext
 test('mixed browser-cookie plus brokered OpenAPI requirements fail closed rather than extracting cookies or exposing the secret to page JavaScript',async()=>{
   const mixed={openapi:'3.1.0',info:{title:'Mixed API',version:'1'},servers:[{url:'/api'}],components:{securitySchemes:{Session:{type:'apiKey',in:'cookie',name:'sid'},ApiKey:{type:'apiKey',in:'header',name:'X-API-Key'}}},paths:{'/mixed':{post:{operationId:'mixed',security:[{Session:[],ApiKey:[]}],responses:{'200':{description:'ok'}}}}}};
   const fetchImpl=async url=>response(mixed,url);
-  const broker=createSessionBroker({storageArea:storageArea(),cryptoImpl:cryptoStub(),fetchImpl,chromeApi:{scripting:{async executeScript(){return[{result:{environment:{api:'documented'},runtime:{origin:ORIGIN,declaredApiDescriptions:[`${ORIGIN}/openapi.json`]},evidence:[]}}];}}}});
-  await broker.vault.putCredential({origin:ORIGIN,kind:'api-key',schemeName:'ApiKey',location:'header',parameterName:'X-API-Key',secret:'secret'});
-  const preview=await broker.previewApi(TAB,'mixed',{}, {includeWellKnownCatalog:false});
+  const session=createSessionBroker({storageArea:storageArea(),cryptoImpl:cryptoStub(),fetchImpl});
+  const api=createSessionApiBroker({vault:session.vault,cryptoImpl:cryptoStub(),fetchImpl,chromeApi:{scripting:{async executeScript(){return[{result:{environment:{api:'documented'},runtime:{origin:ORIGIN,declaredApiDescriptions:[`${ORIGIN}/openapi.json`]},evidence:[]}}];}}}});
+  await session.vault.putCredential({origin:ORIGIN,kind:'api-key',schemeName:'ApiKey',location:'header',parameterName:'X-API-Key',secret:'secret'});
+  const preview=await api.previewApi(TAB,'mixed',{}, {includeWellKnownCatalog:false});
   assert.equal(preview.preview.readyToExecute,false);
   assert.equal(preview.preview.blockedReason,'mixed_browser_and_brokered_auth_unsupported');
 });
