@@ -23,12 +23,19 @@ export function inspectBrowserRuntime(runtime={}){
   function boundedInt(value,fallback,min,max){
     const n=Number(value);return Number.isInteger(n)?Math.max(min,Math.min(max,n)):fallback;
   }
+  function isIframe(node){
+    try{return String(node?.localName??node?.tagName??'').toLowerCase()==='iframe';}catch{return false;}
+  }
   function domTopology(doc,maxInspectedNodes){
     let openShadowRoots=0,iframes=0,accessibleFrames=0,inaccessibleFrames=0,inspectedNodes=0,truncated=false;
     const queue=[];
     try{if(doc?.documentElement)queue.push(doc.documentElement);}catch{}
     for(let cursor=0;cursor<queue.length&&inspectedNodes<maxInspectedNodes;cursor++){
       const node=queue[cursor];inspectedNodes++;
+      if(isIframe(node)){
+        iframes++;
+        try{const root=node.contentDocument?.documentElement;if(root)accessibleFrames++;else inaccessibleFrames++;}catch{inaccessibleFrames++;}
+      }
       try{
         if(node.shadowRoot){
           openShadowRoots++;
@@ -43,10 +50,6 @@ export function inspectBrowserRuntime(runtime={}){
       }catch{}
     }
     if(queue.length>inspectedNodes)truncated=true;
-    try{
-      const frames=Array.from(doc?.querySelectorAll?.('iframe')??[]);iframes=frames.length;
-      for(const frame of frames){try{const root=frame.contentDocument?.documentElement;if(root)accessibleFrames++;else inaccessibleFrames++;}catch{inaccessibleFrames++;}}
-    }catch{}
     return{openShadowRoots,iframes,accessibleFrames,inaccessibleFrames,inspectedNodes,maxInspectedNodes,truncated};
   }
   function declaredApis(doc){
