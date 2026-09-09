@@ -17,7 +17,7 @@ test('/api/capabilities publishes canonical WebMCP parity, runtime probing, API 
   assert.equal(webmcp.browserRuntimeProbeTool,'kata_browser_inspect_runtime');
   assert.equal(webmcp.browserApiDiscovery,true);
   assert.equal(webmcp.browserApiDiscoveryTool,'kata_browser_discover_api');
-  assert.deepEqual(webmcp.apiDescriptionDiscovery,{sources:['document-service-desc','rfc9727-api-catalog'],openapi:['3.0','3.1','3.2'],formats:['json'],executesOperations:false,arbitraryUrlInput:false});
+  assert.deepEqual(webmcp.apiDescriptionDiscovery,{sources:['document-service-desc','rfc9727-api-catalog'],openapi:['3.0','3.1','3.2'],formats:['json'],catalogEvidence:['service-desc','item','api-catalog'],executesOperations:false,fetchesApiEndpoints:false,followsNestedCatalogs:false,arbitraryUrlInput:false});
   assert.equal(webmcp.browserToolPrefix,'kata_browser_');
   assert.deepEqual(webmcp.browserTools,[
     'kata_browser_inspect_runtime',
