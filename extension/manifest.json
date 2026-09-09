@@ -3,8 +3,8 @@
   "name": "KATA Interoperability Inspector",
   "version": "3.0.0",
   "description": "Inspect the current web app for WebMCP and interoperability evidence after explicit user authorization.",
-  "minimum_chrome_version": "95",
-  "permissions": ["activeTab", "scripting"],
+  "minimum_chrome_version": "102",
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://kata-webmcp.vercel.app/*"],
   "background": {
     "service_worker": "service-worker.js",
