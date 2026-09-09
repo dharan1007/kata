@@ -1,4 +1,5 @@
 import {toolDefinitions} from '../lib/shared/tool-contracts.js';
+import {inspectBrowserRuntime} from './runtime-probe.js';
 
 function getModelContext(runtime){return runtime.modelContext??globalThis.document?.modelContext??globalThis.navigator?.modelContext??null;}
 function isPotentiallyTrustworthyOrigin(url){
@@ -43,6 +44,7 @@ function canonicalTools(runtime){
 function browserTools(runtime){
  const searchSchema=toolDefinitions.find(x=>x.name==='kata_search_research').inputSchema;
  return[
+  {name:'kata_browser_inspect_runtime',description:'Inspect the current host document for directly observable WebMCP, browser policy, frame, framework, DOM topology and declared API evidence without probing protected resources or guessing security state.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>inspectBrowserRuntime({document:globalThis.document,window:globalThis.window,navigator:globalThis.navigator,isSecureContext:globalThis.isSecureContext})},
   {name:'kata_browser_search_and_load_research',description:'Search live OpenAlex research and load the results into this browser-owned KATA workspace.',inputSchema:structuredClone(searchSchema),annotations:{readOnlyHint:false,untrustedContentHint:true},execute:({query,limit=8},context={})=>runtime.search(query,limit,'agent',{signal:context.signal})},
   {name:'kata_browser_workspace_summary',description:'Read the current browser-owned KATA workspace summary.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>runtime.summary()},
   {name:'kata_browser_list_automations',description:'List automations saved in this browser-owned KATA workspace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>runtime.listAutomations()},
