@@ -29,24 +29,35 @@ function streamingMedia(operation){
   for(const response of Object.values(operation?.responses??{}))for(const type of Object.keys(response?.content??{}))if(STREAMING_MEDIA.has(type))media.push(type);
   return unique(media).sort();
 }
+function operationRecord(method,path,operation,topSecurity){
+  return{
+    method,path,
+    operationId:typeof operation.operationId==='string'?operation.operationId:null,
+    summary:typeof operation.summary==='string'?operation.summary:null,
+    tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],
+    security:Object.hasOwn(operation,'security')?securityNames(operation.security):topSecurity,
+    streamingMedia:streamingMedia(operation)
+  };
+}
 function parseOpenApiDocument(document,url){
   if(!document||typeof document!=='object'||Array.isArray(document))return{ok:false,reason:'invalid_document'};
   const version=typeof document.openapi==='string'?document.openapi:'';
   if(!/^3\.(?:0|1|2)(?:\.|$)/.test(version))return{ok:false,reason:'unsupported_openapi_version',version:version||null};
-  const topSecurity=securityNames(document.security),operations=[];
+  const topSecurity=securityNames(document.security),operations=[],oas32=/^3\.2(?:\.|$)/.test(version);
   outer:for(const [path,pathItem] of Object.entries(document.paths??{})){
     if(!pathItem||typeof pathItem!=='object')continue;
     for(const method of HTTP_METHODS){
       const operation=pathItem[method];if(!operation||typeof operation!=='object')continue;
-      operations.push({
-        method:method.toUpperCase(),path,
-        operationId:typeof operation.operationId==='string'?operation.operationId:null,
-        summary:typeof operation.summary==='string'?operation.summary:null,
-        tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],
-        security:Object.hasOwn(operation,'security')?securityNames(operation.security):topSecurity,
-        streamingMedia:streamingMedia(operation)
-      });
+      operations.push(operationRecord(method.toUpperCase(),path,operation,topSecurity));
       if(operations.length>=MAX_OPERATIONS)break outer;
+    }
+    if(oas32&&pathItem.additionalOperations&&typeof pathItem.additionalOperations==='object'&&!Array.isArray(pathItem.additionalOperations)){
+      for(const [method,operation] of Object.entries(pathItem.additionalOperations)){
+        if(!method||!operation||typeof operation!=='object'||Array.isArray(operation))continue;
+        if(HTTP_METHODS.includes(method.toLowerCase()))continue;
+        operations.push(operationRecord(method,path,operation,topSecurity));
+        if(operations.length>=MAX_OPERATIONS)break outer;
+      }
     }
   }
   const securitySchemes=Object.entries(document.components?.securitySchemes??{}).map(([name,scheme])=>({
