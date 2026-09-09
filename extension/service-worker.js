@@ -83,7 +83,8 @@ export async function executeAuthorizedTabApiExecution(tab,operationName,args={}
   const injected=await chromeApi.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',func:executePageApiRequest,args:[request]});const response=injected?.[0]?.result;
   if(!response||typeof response!=='object')throw new Error('The page API executor did not return a valid bounded result.');
   const receipt={previewFingerprint:fresh.previewFingerprint,operationName,method:fresh.preview.method,stateChanging:fresh.preview.stateChanging,requiresAuthorization:fresh.preview.requiresAuthorization,status:response.status??null,targetOk:Boolean(response.ok),outcome:response.outcome??'unknown',bytes:Number(response.bytes??0),contentType:response.contentType??null,truncated:Boolean(response.truncated),durationMs:Number(response.durationMs??0)};
-  return{ok:true,receipt,response};
+  const completed=receipt.outcome==='completed';
+  return{ok:completed,attempted:true,error:completed?null:`API execution outcome is unknown${response.networkError?`: ${response.networkError}`:''}. Do not retry automatically because the target may have committed the operation.`,receipt,response};
 }
 
 export async function inspectAuthorizedTab(tab,intent='read',deps={}){
