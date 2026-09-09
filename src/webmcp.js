@@ -22,13 +22,22 @@ function browserAnnotations(annotations={}){
  if('untrustedContentHint'in annotations)out.untrustedContentHint=Boolean(annotations.untrustedContentHint);
  return out;
 }
+async function invokeCanonical(runtime,name,args,signal){
+ if(typeof runtime.invokeCanonical==='function')return runtime.invokeCanonical(name,args,{signal});
+ signal?.throwIfAborted();
+ const response=await fetch('/api/invoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,arguments:args}),signal});
+ let data;try{data=await response.json();}catch(error){if(signal?.aborted)throw signal.reason??error;throw new Error(`HTTP_${response.status}`);}
+ signal?.throwIfAborted();
+ if(!response.ok||data.ok===false){const error=new Error(data?.error?.code??`HTTP_${response.status}`);error.details=data?.error?.details;throw error;}
+ return data.result;
+}
 function canonicalTools(runtime){
  return toolDefinitions.map(def=>({
   name:def.name,
   description:def.description,
   inputSchema:structuredClone(def.inputSchema),
   annotations:browserAnnotations(def.annotations),
-  execute:(input,context={})=>runtime.invokeCanonical(def.name,input,{signal:context.signal})
+  execute:(input,context={})=>invokeCanonical(runtime,def.name,input,context.signal)
  }));
 }
 function browserTools(runtime){
