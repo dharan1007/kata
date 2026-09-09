@@ -14,7 +14,7 @@ test('capabilities distinguish local OpenAPI compilation from user-authorized pr
   assert.equal(adapters.executesOperations,false);
   assert.equal(adapters.extensionExecutionAvailable,true);
   const execution=r.body.capabilities.interop.browserExtension.apiExecution;
-  assert.deepEqual(execution,{source:'standards-discovered-openapi',mode:'user-authorized-preview-bound',sameOriginOnly:true,executionWorld:'MAIN',rediscoversContractBeforeExecution:true,sha256PreviewBinding:true,credentialModes:['omit','same-origin-browser-managed'],extractsCredentials:false,acceptsCredentialArguments:false,redirects:'error',automaticRetries:false,defaultTimeoutMs:15000,maxTimeoutMs:15000,defaultMaxResponseBytes:1048576,maxResponseBytes:1048576,responseMode:'bounded-snapshot',receipts:'local-only',explicitExecutionApproval:true});
+  assert.deepEqual(execution,{source:'standards-discovered-openapi',mode:'user-authorized-preview-bound',sameOriginOnly:true,executionWorld:'MAIN',rediscoversContractBeforeExecution:true,sha256PreviewBinding:true,credentialModes:['omit','same-origin-browser-managed'],extractsCredentials:false,acceptsCredentialArguments:false,redirects:'error',automaticRetries:false,defaultTimeoutMs:15000,maxTimeoutMs:15000,maxRequestUrlBytes:16384,maxRequestHeaderBytes:32768,maxRequestBodyBytes:262144,defaultMaxResponseBytes:1048576,maxResponseBytes:1048576,responseMode:'bounded-snapshot',indeterminateNetworkOutcome:'unknown-no-auto-retry',receipts:'local-only',explicitExecutionApproval:true});
   assert.ok(r.body.capabilities.interop.browserExtension.localOnly.includes('apiExecutionPreviews'));
   assert.ok(r.body.capabilities.interop.browserExtension.localOnly.includes('apiExecutionReceipts'));
 });
