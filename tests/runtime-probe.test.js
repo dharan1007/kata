@@ -5,20 +5,19 @@ import {inspectBrowserRuntime} from '../src/runtime-probe.js';
 function makeDocument({permission=true,crossFrame=false,api=true}={}){
   const apiLink={href:'https://example.test/openapi.json',getAttribute:()=>'/openapi.json'};
   const meta={content:"default-src 'self'"};
-  const shadowHost={children:[],shadowRoot:{children:[]}};
-  const frame=crossFrame?{get contentDocument(){throw new Error('cross origin')}}:{contentDocument:{documentElement:{}}};
+  const shadowHost={localName:'app-shell',children:[],shadowRoot:{children:[]}};
+  const frame=crossFrame?{localName:'iframe',children:[],shadowRoot:null,get contentDocument(){throw new Error('cross origin')}}:{localName:'iframe',children:[],shadowRoot:null,contentDocument:{documentElement:{}}};
   return{
     URL:'https://example.test/app',
     modelContext:{registerTool(){}},
     permissionsPolicy:{allowsFeature(name){return name==='tools'?permission:false;}},
-    documentElement:{children:[shadowHost]},
+    documentElement:{localName:'html',children:[shadowHost,frame],shadowRoot:null},
     querySelector(selector){
       if(selector==='#__next')return{};
       if(selector.includes('Content-Security-Policy'))return meta;
       return null;
     },
     querySelectorAll(selector){
-      if(selector==='iframe')return[frame];
       if(selector.includes('service-desc'))return api?[apiLink]:[];
       return[];
     }
@@ -38,6 +37,7 @@ test('runtime probe derives directly observable browser evidence and leaves serv
   assert.equal(result.environment.botProtection,'unknown');
   assert.equal(result.runtime.secureContext,true);
   assert.equal(result.runtime.dom.openShadowRoots,1);
+  assert.equal(result.runtime.dom.iframes,1);
   assert.equal(result.runtime.dom.accessibleFrames,1);
   assert.equal(result.runtime.dom.truncated,false);
   assert.ok(result.runtime.frameworkHints.some(x=>x.name==='Next.js'));
