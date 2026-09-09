@@ -1,4 +1,5 @@
 import {previewOpenApiRequest} from './api-adapter.js';
+import {assertSchema} from '../lib/shared/schema.js';
 
 const SAFE_METHODS=new Set(['GET','HEAD','OPTIONS']);
 const FORBIDDEN_BROWSER_METHODS=new Set(['CONNECT','TRACE','TRACK']);
@@ -7,6 +8,10 @@ const DEFAULT_TIMEOUT_MS=15000;
 const MAX_TIMEOUT_MS=15000;
 const DEFAULT_RESPONSE_BYTES=1024*1024;
 const MAX_RESPONSE_BYTES=1024*1024;
+const MAX_REQUEST_BODY_BYTES=256*1024;
+const MAX_REQUEST_URL_BYTES=16*1024;
+const MAX_REQUEST_HEADER_BYTES=32*1024;
+const EXECUTABLE_SCHEMA_KEYS=new Set(['type','enum','properties','required','additionalProperties','items','minItems','maxItems','minLength','maxLength','pattern','minimum','maximum','title','description','default','examples','example','format','deprecated','readOnly','writeOnly']);
 
 function boundedInt(value,fallback,min,max){const n=Number(value);return Number.isInteger(n)?Math.max(min,Math.min(max,n)):fallback;}
 function safeHttpUrl(raw){try{const url=new URL(String(raw));if(!['http:','https:'].includes(url.protocol)||url.username||url.password)return null;url.hash='';return url;}catch{return null;}}
@@ -26,8 +31,24 @@ function sanitizeHeaders(headers){
     out[name]=String(value);
   }return out;
 }
+function assertExecutableSchemaSubset(schema,path='$'){
+  if(!schema||typeof schema!=='object'||Array.isArray(schema))throw new TypeError(`Execution schema is not enforceable at ${path}`);
+  for(const key of Object.keys(schema))if(!EXECUTABLE_SCHEMA_KEYS.has(key))throw new TypeError(`Execution schema keyword is not supported at ${path}: ${key}`);
+  if(Array.isArray(schema.type))throw new TypeError(`Union types are not supported for execution at ${path}`);
+  if(schema.additionalProperties!==undefined&&typeof schema.additionalProperties!=='boolean')throw new TypeError(`Schema-valued additionalProperties is not supported for execution at ${path}`);
+  if(schema.properties!==undefined){if(!schema.properties||typeof schema.properties!=='object'||Array.isArray(schema.properties))throw new TypeError(`Invalid properties schema at ${path}`);for(const [name,child] of Object.entries(schema.properties))assertExecutableSchemaSubset(child,`${path}.properties.${name}`);}
+  if(schema.items!==undefined)assertExecutableSchemaSubset(schema.items,`${path}.items`);
+}
+function utf8Bytes(value){return new TextEncoder().encode(String(value??'')).length;}
+function assertRequestBudgets(url,headers,body){
+  if(utf8Bytes(url)>MAX_REQUEST_URL_BYTES)throw new TypeError('API request URL is too large for bounded execution');
+  let headerBytes=0;for(const [name,value] of Object.entries(headers??{}))headerBytes+=utf8Bytes(name)+utf8Bytes(value)+4;if(headerBytes>MAX_REQUEST_HEADER_BYTES)throw new TypeError('API request headers are too large for bounded execution');
+  if(body!==null&&body!==undefined&&utf8Bytes(body)>MAX_REQUEST_BODY_BYTES)throw new TypeError('API request body is too large for bounded execution');
+}
 
 export function buildAuthorizedExecutionPreview(candidate,args,pageOrigin,options={}){
+  assertExecutableSchemaSubset(candidate?.inputSchema??null);
+  try{assertSchema(candidate.inputSchema,args);}catch(error){const details=Array.isArray(error?.details)&&error.details.length?`: ${error.details.join('; ')}`:'';throw new TypeError(`Invalid API execution arguments${details}`);}
   const page=safeHttpUrl(pageOrigin),request=previewOpenApiRequest(candidate,args);if(!page)throw new TypeError('A valid HTTP(S) page origin is required');
   const target=safeHttpUrl(request.url);if(!target)throw new TypeError('Candidate request URL is invalid');
   const method=String(request.method??'').toUpperCase();
@@ -37,9 +58,10 @@ export function buildAuthorizedExecutionPreview(candidate,args,pageOrigin,option
   const credentialMode=requiresAuthorization?'same-origin':'omit';
   const timeoutMs=boundedInt(options.timeoutMs,DEFAULT_TIMEOUT_MS,250,MAX_TIMEOUT_MS);
   const maxResponseBytes=boundedInt(options.maxResponseBytes,DEFAULT_RESPONSE_BYTES,1,MAX_RESPONSE_BYTES);
+  const headers=sanitizeHeaders(request.headers);assertRequestBudgets(target.href,headers,request.body??null);
   const blockedReason=!sameOrigin?'same_origin_required':unsupportedMethod?'unsupported_browser_method':null;
   return{
-    operationName:candidate.name,method,url:target.href,headers:sanitizeHeaders(request.headers),body:request.body??null,
+    operationName:candidate.name,method,url:target.href,headers,body:request.body??null,
     security:[...(request.security??[])],requiresAuthorization,credentialMode,
     streamingMedia:[...(request.streamingMedia??[])],sameOrigin,stateChanging:!SAFE_METHODS.has(method),
     redirect:'error',cache:'no-store',timeoutMs,maxResponseBytes,readyToExecute:blockedReason===null,blockedReason
@@ -73,6 +95,7 @@ export async function executePageApiRequest(request,runtime={}){
   const headers={};for(const [name,value] of Object.entries(request?.headers??{})){
     const lower=String(name).toLowerCase();if(['authorization','cookie','proxy-authorization','set-cookie','host','content-length','origin','referer'].includes(lower)||lower.startsWith('proxy-')||lower.startsWith('sec-'))throw new TypeError(`Credential or transport header is not executable: ${name}`);headers[name]=String(value);
   }
+  const body=(method==='GET'||method==='HEAD')?null:(request?.body??null);let headerBytes=0;for(const [name,value] of Object.entries(headers))headerBytes+=new TextEncoder().encode(`${name}: ${value}\r\n`).length;if(new TextEncoder().encode(target.href).length>16384||headerBytes>32768||(body!==null&&new TextEncoder().encode(String(body)).length>262144))throw new TypeError('API request exceeds bounded execution limits');
   const fetchImpl=scope.fetch??globalThis.fetch;if(typeof fetchImpl!=='function')throw new Error('Browser fetch is unavailable');
   const AbortControllerImpl=scope.AbortController??globalThis.AbortController;if(typeof AbortControllerImpl!=='function')throw new Error('AbortController is unavailable');
   const setTimer=scope.setTimeout??globalThis.setTimeout,clearTimer=scope.clearTimeout??globalThis.clearTimeout;
@@ -80,7 +103,7 @@ export async function executePageApiRequest(request,runtime={}){
   const timer=setTimer(()=>{timedOut=true;controller.abort(new Error('KATA_API_TIMEOUT'));},timeoutMs);
   let response;
   try{
-    response=await fetchImpl(target.href,{method,headers,body:(method==='GET'||method==='HEAD')?undefined:(request?.body??undefined),credentials,redirect:'error',cache:'no-store',signal:controller.signal});
+    response=await fetchImpl(target.href,{method,headers,body:body??undefined,credentials,redirect:'error',cache:'no-store',signal:controller.signal});
   }catch(error){
     clearTimer(timer);const ended=scope.performance?.now?.()??globalThis.performance?.now?.()??Date.now();
     return{ok:false,status:null,statusText:null,url:target.href,contentType:null,bytes:0,bodyText:null,truncated:false,outcome:'unknown',networkError:timedOut?'timeout':String(error?.message??error),durationMs:Math.max(0,ended-started)};
