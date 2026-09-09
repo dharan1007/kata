@@ -40,6 +40,18 @@ test('discovers declared same-origin OpenAPI and extracts bounded operations, au
   assert.deepEqual(result.environmentPatch,{api:'documented'});
 });
 
+test('inventories OpenAPI 3.2 additionalOperations instead of silently dropping custom HTTP methods',async()=>{
+  const document=structuredClone(OPENAPI);
+  document.paths['/items'].additionalOperations={COPY:{operationId:'copyItem',summary:'Copy item',security:[{apiKey:[]}],responses:{'200':{content:{'application/json':{}}}}}};
+  const fetch=async()=>response({body:JSON.stringify(document)});
+  const result=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch});
+  const operation=result.operations.find(x=>x.operationId==='copyItem');
+  assert.ok(operation,'missing OAS 3.2 additional operation');
+  assert.equal(operation.method,'COPY');
+  assert.equal(operation.path,'/items');
+  assert.deepEqual(operation.security,['apiKey']);
+});
+
 test('uses omitted credentials for cross-origin descriptions and reports browser fetch failures without bypassing them',async()=>{
   const calls=[];
   const fetch=async(url,options)=>{calls.push({url:String(url),options});throw new TypeError('Failed to fetch');};
