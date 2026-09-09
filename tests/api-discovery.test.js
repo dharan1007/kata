@@ -64,9 +64,12 @@ test('uses omitted credentials for cross-origin descriptions and reports browser
   assert.ok(result.evidence.some(x=>x.code==='API_DESCRIPTION_FETCH_FAILED'));
 });
 
-test('discovers service-desc targets from the RFC 9727 catalog and permits browser-authorized cross-origin catalog redirects without forwarding ambient credentials',async()=>{
+test('discovers RFC 9727 description, endpoint and nested-catalog evidence without crawling endpoint or nested-catalog targets',async()=>{
   const calls=[];
-  const catalog={linkset:[{anchor:'https://publisher.test/', 'service-desc':[{href:'/openapi.json'},{href:'https://docs.vendor.test/api.json'}]}]};
+  const catalog={linkset:[
+    {anchor:'https://publisher.test/api/foo','service-desc':[{href:'/openapi.json'},{href:'https://docs.vendor.test/api.json'}],item:[{href:'https://api.publisher.test/foo'}]},
+    {anchor:'https://publisher.test/.well-known/api-catalog','api-catalog':[{href:'https://publisher.test/iot/api-catalog'}]}
+  ]};
   const fetch=async(url,options)=>{
     calls.push({url:String(url),options});
     if(String(url).endsWith('/.well-known/api-catalog'))return response({url:'https://publisher.test/catalog.json',contentType:'application/linkset+json',body:JSON.stringify(catalog)});
@@ -80,6 +83,10 @@ test('discovers service-desc targets from the RFC 9727 catalog and permits brows
   assert.equal(result.catalog.finalUrl,'https://publisher.test/catalog.json');
   assert.ok(result.sources.includes('https://publisher.test/openapi.json'));
   assert.ok(result.sources.includes('https://docs.vendor.test/api.json'));
+  assert.deepEqual(result.catalog.apiEndpoints,['https://api.publisher.test/foo']);
+  assert.deepEqual(result.catalog.nestedCatalogs,['https://publisher.test/iot/api-catalog']);
+  assert.ok(!calls.some(x=>x.url==='https://api.publisher.test/foo'));
+  assert.ok(!calls.some(x=>x.url==='https://publisher.test/iot/api-catalog'));
 });
 
 test('reports YAML descriptions as unsupported instead of guessing a partial parse',async()=>{
