@@ -44,11 +44,12 @@ async function setup({taskMode=false}={}){
 }
 
 test('trusted MCP fetch injects one bound Bearer secret while preserving omit/manual transport policy',async()=>{
-  const {credential,server,broker}=await setup();
-  const authorized=await createBearerAuthorizedFetch(server.fetchImpl,broker.vault,credential,ENDPOINT);
-  const response=await authorized(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',redirect:'manual'});
-  assert.equal(response.status,401,'bare helper call has no MCP body and should only prove authorization transport; test server rejects body after auth');
-  const sent=server.calls.at(-1);
+  const {credential,broker}=await setup();
+  let sent=null;
+  const baseFetch=async(url,init)=>{sent={url,init};return{ok:true,status:204};};
+  const authorized=await createBearerAuthorizedFetch(baseFetch,broker.vault,credential,ENDPOINT);
+  const response=await authorized(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',credentials:'omit',redirect:'manual'});
+  assert.equal(response.status,204);
   assert.equal(sent.init.headers.Authorization,'Bearer mcp-secret-token');
   assert.equal(sent.init.credentials,'omit');
   assert.equal(sent.init.redirect,'manual');
