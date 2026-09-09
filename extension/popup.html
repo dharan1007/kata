@@ -20,8 +20,15 @@
       <option value="automate">Automate</option>
       <option value="expose_webmcp">Expose WebMCP</option>
       <option value="call_api">Call API</option>
+      <option value="connect_mcp">Connect MCP</option>
     </select>
     <button id="inspect" type="button">Inspect current tab</button>
+    <section class="mcp-probe">
+      <label for="mcp-endpoint">MCP endpoint on this site</label>
+      <input id="mcp-endpoint" value="/mcp" autocomplete="off" spellcheck="false">
+      <button id="inspect-mcp" type="button">Inspect MCP endpoint</button>
+      <p class="muted">Same-origin HTTPS only, except loopback HTTP for local development. Discovery never sends cookies or tokens and never calls tools.</p>
+    </section>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="result" hidden>
       <h2>Observed runtime</h2>
@@ -30,6 +37,10 @@
       <div id="diagnosis"></div>
       <h2>Restrictions and setup</h2>
       <ul id="blockers"></ul>
+    </section>
+    <section id="mcp-result" hidden>
+      <h2>MCP discovery</h2>
+      <div id="mcp-summary"></div>
     </section>
   </main>
   <script type="module" src="popup.js"></script>
