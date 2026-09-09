@@ -8,7 +8,7 @@ const out=path.join(root,'dist');
 await fs.rm(out,{recursive:true,force:true});
 await fs.mkdir(path.join(out,'src'),{recursive:true});
 
-const assets=['index.html','style.css','favicon.svg','robots.txt','src/main.js','src/app.js','src/webmcp.js','src/runtime-probe.js','lib/shared/tool-contracts.js'];
+const assets=['index.html','style.css','favicon.svg','robots.txt','src/main.js','src/app.js','src/webmcp.js','src/runtime-probe.js','src/api-discovery.js','lib/shared/tool-contracts.js'];
 const integrity={version:'3.0.0',generatedAt:new Date().toISOString(),assets:{}};
 for(const rel of assets){
   const src=path.join(root,rel),dst=path.join(out,rel);
