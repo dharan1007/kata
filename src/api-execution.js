@@ -49,20 +49,121 @@ export async function fingerprintExecutionPreview(preview,cryptoImpl=globalThis.
 export function executionRequestFromPreview(preview){if(!preview?.readyToExecute)throw new Error(`API request is not executable: ${preview?.blockedReason??'policy_blocked'}`);if(preview.authorizationStrategy==='browser-cookie'&&preview.credentialMode!=='same-origin')throw new Error('Browser-cookie authorization requires same-origin credentials');if(preview.authorizationStrategy!=='browser-cookie'&&preview.credentialMode!=='omit')throw new Error('Ambient browser credentials are not authorized by this API preview');return{method:preview.method,url:preview.url,headers:{...(preview.headers??{})},body:preview.body??null,credentials:preview.credentialMode,redirect:'error',cache:'no-store',timeoutMs:preview.timeoutMs,maxResponseBytes:preview.maxResponseBytes};}
 
 export async function executePageApiRequest(request,runtime={}){
-  const scope=runtime&&typeof runtime==='object'?runtime:{},currentOrigin=scope.location?.origin??globalThis.location?.origin;let page,target;try{page=new URL(String(currentOrigin));target=new URL(String(request?.url));}catch{throw new TypeError('A valid page and request URL are required');}
-  if(!['http:','https:'].includes(target.protocol)||target.username||target.password)throw new TypeError('API execution requires a safe HTTP(S) URL');if(target.origin!==page.origin)throw new Error('API execution is restricted to the active page same-origin boundary');
-  const method=String(request?.method??'').toUpperCase();if(!method||/\s/.test(method)||['CONNECT','TRACE','TRACK'].includes(method))throw new TypeError('Unsupported browser HTTP method');
-  const credentials=request?.credentials==='same-origin'?'same-origin':request?.credentials==='omit'?'omit':null;if(!credentials)throw new TypeError('Unsupported credential mode');if(request?.redirect!=='error')throw new TypeError('Redirects must remain disabled for API execution');
-  const timeoutMs=Math.max(250,Math.min(15000,Number.isInteger(request?.timeoutMs)?request.timeoutMs:15000)),maxResponseBytes=Math.max(1,Math.min(1024*1024,Number.isInteger(request?.maxResponseBytes)?request.maxResponseBytes:1024*1024));
-  const headers={};for(const [name,value] of Object.entries(request?.headers??{})){const lower=String(name).toLowerCase();if(['authorization','cookie','proxy-authorization','set-cookie','host','content-length','origin','referer'].includes(lower)||lower.startsWith('proxy-')||lower.startsWith('sec-'))throw new TypeError(`Credential or transport header is not executable: ${name}`);headers[name]=String(value);}
-  const body=(method==='GET'||method==='HEAD')?null:(request?.body??null);let headerBytes=0;for(const [name,value] of Object.entries(headers))headerBytes+=new TextEncoder().encode(`${name}: ${value}\r\n`).length;if(new TextEncoder().encode(target.href).length>16384||headerBytes>32768||(body!==null&&new TextEncoder().encode(String(body)).length>262144))throw new TypeError('API request exceeds bounded execution limits');
-  const fetchImpl=scope.fetch??globalThis.fetch;if(typeof fetchImpl!=='function')throw new Error('Browser fetch is unavailable');const AbortControllerImpl=scope.AbortController??globalThis.AbortController;if(typeof AbortControllerImpl!=='function')throw new Error('AbortController is unavailable');
-  const setTimer=scope.setTimeout??globalThis.setTimeout,clearTimer=scope.clearTimeout??globalThis.clearTimeout,started=scope.performance?.now?.()??globalThis.performance?.now?.()??Date.now();const controller=new AbortControllerImpl();let timedOut=false;const timer=setTimer(()=>{timedOut=true;controller.abort(new Error('KATA_API_TIMEOUT'));},timeoutMs);let response;
-  try{response=await fetchImpl(target.href,{method,headers,body:body??undefined,credentials,redirect:'error',cache:'no-store',signal:controller.signal});}catch(error){clearTimer(timer);const ended=scope.performance?.now?.()??globalThis.performance?.now?.()??Date.now();return{ok:false,status:null,statusText:null,url:target.href,contentType:null,bytes:0,bodyText:null,truncated:false,outcome:'unknown',networkError:timedOut?'timeout':String(error?.message??error),durationMs:Math.max(0,ended-started)};}
-  clearTimer(timer);const finalUrl=new URL(String(response?.url||target.href),target.href);if(finalUrl.origin!==page.origin)throw new Error('API response escaped the active page same-origin boundary');
-  const contentType=String(response?.headers?.get?.('content-type')??''),declaredLength=Number(response?.headers?.get?.('content-length')),textual=/^(?:text\/)|json|xml|javascript|x-www-form-urlencoded/i.test(contentType);let bytes=0,bodyText=null,truncated=false;
-  if(Number.isFinite(declaredLength)&&declaredLength>maxResponseBytes){truncated=true;}
-  else if(response?.body?.getReader){const reader=response.body.getReader(),chunks=[];let total=0;try{while(true){const {done,value}=await reader.read();if(done)break;const chunk=value instanceof Uint8Array?value:new Uint8Array(value??[]),room=maxResponseBytes-total;if(chunk.length>room){if(room>0)chunks.push(chunk.slice(0,room));total+=Math.max(0,room);truncated=true;await reader.cancel();break;}chunks.push(chunk);total+=chunk.length;}}finally{try{reader.releaseLock?.();}catch{}}bytes=total;if(textual){const merged=new Uint8Array(total);let offset=0;for(const chunk of chunks){merged.set(chunk,offset);offset+=chunk.length;}const Decoder=scope.TextDecoder??globalThis.TextDecoder;bodyText=new Decoder().decode(merged);}}
-  else if(typeof response?.text==='function'){const text=await response.text(),Encoder=scope.TextEncoder??globalThis.TextEncoder,encoded=new Encoder().encode(text);if(encoded.length>maxResponseBytes){truncated=true;bytes=maxResponseBytes;if(textual){const Decoder=scope.TextDecoder??globalThis.TextDecoder;bodyText=new Decoder().decode(encoded.slice(0,maxResponseBytes));}}else{bytes=encoded.length;if(textual)bodyText=text;}}
-  const ended=scope.performance?.now?.()??globalThis.performance?.now?.()??Date.now();return{ok:Boolean(response?.ok),status:Number(response?.status??0),statusText:String(response?.statusText??''),url:finalUrl.href,contentType:contentType||null,bytes,bodyText,truncated,outcome:'completed',networkError:null,durationMs:Math.max(0,ended-started)};
+  const scope=runtime&&typeof runtime==='object'?runtime:{};
+  const currentOrigin=scope.location?.origin??globalThis.location?.origin;
+  let page,target;
+  try{page=new URL(String(currentOrigin));target=new URL(String(request?.url));}catch{throw new TypeError('A valid page and request URL are required');}
+  if(!['http:','https:'].includes(target.protocol)||target.username||target.password)throw new TypeError('API execution requires a safe HTTP(S) URL');
+  if(target.origin!==page.origin)throw new Error('API execution is restricted to the active page same-origin boundary');
+  const method=String(request?.method??'').toUpperCase();
+  if(!method||/\s/.test(method)||['CONNECT','TRACE','TRACK'].includes(method))throw new TypeError('Unsupported browser HTTP method');
+  const credentials=request?.credentials==='same-origin'?'same-origin':request?.credentials==='omit'?'omit':null;
+  if(!credentials)throw new TypeError('Unsupported credential mode');
+  if(request?.redirect!=='error')throw new TypeError('Redirects must remain disabled for API execution');
+  const timeoutMs=Math.max(250,Math.min(15000,Number.isInteger(request?.timeoutMs)?request.timeoutMs:15000));
+  const maxResponseBytes=Math.max(1,Math.min(1024*1024,Number.isInteger(request?.maxResponseBytes)?request.maxResponseBytes:1024*1024));
+  const headers={};
+  for(const [name,value] of Object.entries(request?.headers??{})){
+    const lower=String(name).toLowerCase();
+    if(['authorization','cookie','proxy-authorization','set-cookie','host','content-length','origin','referer'].includes(lower)||lower.startsWith('proxy-')||lower.startsWith('sec-'))throw new TypeError(`Credential or transport header is not executable: ${name}`);
+    headers[name]=String(value);
+  }
+  const body=(method==='GET'||method==='HEAD')?null:(request?.body??null);
+  let headerBytes=0;
+  for(const [name,value] of Object.entries(headers))headerBytes+=new TextEncoder().encode(`${name}: ${value}\r\n`).length;
+  if(new TextEncoder().encode(target.href).length>16384||headerBytes>32768||(body!==null&&new TextEncoder().encode(String(body)).length>262144))throw new TypeError('API request exceeds bounded execution limits');
+
+  const fetchImpl=scope.fetch??globalThis.fetch;
+  if(typeof fetchImpl!=='function')throw new Error('Browser fetch is unavailable');
+  const AbortControllerImpl=scope.AbortController??globalThis.AbortController;
+  if(typeof AbortControllerImpl!=='function')throw new Error('AbortController is unavailable');
+  const setTimer=scope.setTimeout??globalThis.setTimeout;
+  const clearTimer=scope.clearTimeout??globalThis.clearTimeout;
+  const now=()=>scope.performance?.now?.()??globalThis.performance?.now?.()??Date.now();
+  const started=now();
+  const controller=new AbortControllerImpl();
+  let timedOut=false;
+  let reader=null;
+  const timer=setTimer(()=>{
+    timedOut=true;
+    try{controller.abort(new Error('KATA_API_TIMEOUT'));}catch{controller.abort();}
+  },timeoutMs);
+
+  let response=null;
+  let contentType=null;
+  let bytes=0;
+  try{
+    try{
+      response=await fetchImpl(target.href,{method,headers,body:body??undefined,credentials,redirect:'error',cache:'no-store',signal:controller.signal});
+    }catch(error){
+      return{ok:false,status:null,statusText:null,url:target.href,contentType:null,bytes:0,bodyText:null,truncated:false,outcome:'unknown',networkError:timedOut?'timeout':String(error?.message??error),durationMs:Math.max(0,now()-started)};
+    }
+
+    const finalUrl=new URL(String(response?.url||target.href),target.href);
+    if(finalUrl.origin!==page.origin)throw new Error('API response escaped the active page same-origin boundary');
+    contentType=String(response?.headers?.get?.('content-type')??'')||null;
+    const declaredLength=Number(response?.headers?.get?.('content-length'));
+    const textual=/^(?:text\/)|json|xml|javascript|x-www-form-urlencoded/i.test(contentType??'');
+    let bodyText=null;
+    let truncated=false;
+
+    if(Number.isFinite(declaredLength)&&declaredLength>maxResponseBytes){
+      truncated=true;
+      try{await response?.body?.cancel?.('KATA_RESPONSE_LIMIT');}catch{}
+      try{controller.abort(new Error('KATA_RESPONSE_LIMIT'));}catch{controller.abort();}
+    }else if(response?.body?.getReader){
+      reader=response.body.getReader();
+      const chunks=[];
+      let total=0;
+      try{
+        while(true){
+          const {done,value}=await reader.read();
+          if(done)break;
+          const chunk=value instanceof Uint8Array?value:new Uint8Array(value??[]);
+          const room=maxResponseBytes-total;
+          if(chunk.length>room){
+            if(room>0)chunks.push(chunk.slice(0,room));
+            total+=Math.max(0,room);
+            truncated=true;
+            try{await reader.cancel('KATA_RESPONSE_LIMIT');}catch{}
+            try{controller.abort(new Error('KATA_RESPONSE_LIMIT'));}catch{controller.abort();}
+            break;
+          }
+          chunks.push(chunk);
+          total+=chunk.length;
+        }
+      }catch(error){
+        return{ok:false,status:Number(response?.status??0),statusText:String(response?.statusText??''),url:finalUrl.href,contentType,bytes:total,bodyText:null,truncated:false,outcome:'unknown',networkError:timedOut?'timeout':`response_body_error:${String(error?.message??error)}`,durationMs:Math.max(0,now()-started)};
+      }
+      bytes=total;
+      if(textual){
+        const merged=new Uint8Array(total);
+        let offset=0;
+        for(const chunk of chunks){merged.set(chunk,offset);offset+=chunk.length;}
+        const Decoder=scope.TextDecoder??globalThis.TextDecoder;
+        bodyText=new Decoder().decode(merged);
+      }
+    }else if(typeof response?.text==='function'){
+      try{
+        const text=await response.text();
+        const Encoder=scope.TextEncoder??globalThis.TextEncoder;
+        const encoded=new Encoder().encode(text);
+        if(encoded.length>maxResponseBytes){
+          truncated=true;
+          bytes=maxResponseBytes;
+          if(textual){const Decoder=scope.TextDecoder??globalThis.TextDecoder;bodyText=new Decoder().decode(encoded.slice(0,maxResponseBytes));}
+        }else{
+          bytes=encoded.length;
+          if(textual)bodyText=text;
+        }
+      }catch(error){
+        return{ok:false,status:Number(response?.status??0),statusText:String(response?.statusText??''),url:finalUrl.href,contentType,bytes:0,bodyText:null,truncated:false,outcome:'unknown',networkError:timedOut?'timeout':`response_body_error:${String(error?.message??error)}`,durationMs:Math.max(0,now()-started)};
+      }
+    }
+
+    return{ok:Boolean(response?.ok),status:Number(response?.status??0),statusText:String(response?.statusText??''),url:finalUrl.href,contentType,bytes,bodyText,truncated,outcome:'completed',networkError:null,durationMs:Math.max(0,now()-started)};
+  }finally{
+    try{reader?.releaseLock?.();}catch{}
+    clearTimer(timer);
+  }
 }
