@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {inspectBrowserRuntime} from '../src/runtime-probe.js';
 
-function makeDocument({permission=true,crossFrame=false}={}){
+function makeDocument({permission=true,crossFrame=false,api=true}={}){
   const apiLink={href:'https://example.test/openapi.json',getAttribute:()=>'/openapi.json'};
   const meta={content:"default-src 'self'"};
   const shadowHost={children:[],shadowRoot:{children:[]}};
@@ -19,7 +19,7 @@ function makeDocument({permission=true,crossFrame=false}={}){
     },
     querySelectorAll(selector){
       if(selector==='iframe')return[frame];
-      if(selector.includes('service-desc'))return[apiLink];
+      if(selector.includes('service-desc'))return api?[apiLink]:[];
       return[];
     }
   };
@@ -32,6 +32,7 @@ test('runtime probe derives directly observable browser evidence and leaves serv
   assert.equal(result.environment.frame,'top');
   assert.equal(result.environment.webMcpApi,'available');
   assert.equal(result.environment.toolsPermission,'allowed');
+  assert.equal(result.environment.api,'documented');
   assert.equal(result.environment.auth,'unknown');
   assert.equal(result.environment.cors,'unknown');
   assert.equal(result.environment.botProtection,'unknown');
@@ -40,7 +41,16 @@ test('runtime probe derives directly observable browser evidence and leaves serv
   assert.equal(result.runtime.dom.accessibleFrames,1);
   assert.ok(result.runtime.frameworkHints.some(x=>x.name==='Next.js'));
   assert.deepEqual(result.runtime.declaredApiDescriptions,['https://example.test/openapi.json']);
+  assert.equal(result.evidence.find(x=>x.key==='api').source,'service-description-declaration');
   assert.equal(result.runtime.cspMetaPresent,true);
+});
+
+test('runtime probe does not claim an API when no machine-readable service declaration is observed',()=>{
+  const document=makeDocument({api:false});
+  const window={location:{href:'https://example.test/app',origin:'https://example.test'}};window.top=window;
+  const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true});
+  assert.equal(result.environment.api,'unknown');
+  assert.deepEqual(result.runtime.declaredApiDescriptions,[]);
 });
 
 test('runtime probe reports blocked tools policy only when policy introspection establishes denial',()=>{
