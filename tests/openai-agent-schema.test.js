@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import agents from '../api/agents.js';
+import capabilities from '../api/capabilities.js';
 import {toolDefinitions,toOpenAITools,toOpenAIResponsesTools} from '../lib/server/tools.js';
 
 function res(){return{statusCode:200,headers:{},body:null,status(n){this.statusCode=n;return this;},setHeader(k,v){this.headers[k.toLowerCase()]=v;},json(v){this.body=v;return this;},end(v){this.body=v;return this;}};}
@@ -40,4 +41,12 @@ test('/api/agents publishes both modern Responses and legacy OpenAI schemas',asy
   assert.deepEqual(r.body.openai,toOpenAITools());
   assert.equal(r.body.openaiResponses[0].name,toolDefinitions[0].name);
   assert.equal(r.body.openai[0].function.name,toolDefinitions[0].name);
+});
+
+test('/api/capabilities advertises the modern Responses bridge without removing legacy OpenAI discovery',async()=>{
+  const r=res();
+  await capabilities({method:'GET',headers:{}},r);
+  assert.equal(r.statusCode,200);
+  assert.deepEqual(r.body.capabilities.bridges.openaiResponses,toOpenAIResponsesTools());
+  assert.deepEqual(r.body.capabilities.bridges.openai,toOpenAITools());
 });
