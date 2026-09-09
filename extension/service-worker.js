@@ -1,6 +1,9 @@
 import {inspectBrowserRuntime} from '../src/runtime-probe.js';
 import {discoverBrowserApis} from '../src/api-discovery.js';
 import {compileOpenApiCandidates} from '../src/api-adapter.js';
+import {buildAuthorizedExecutionPreview,fingerprintExecutionPreview,executionRequestFromPreview,executePageApiRequest} from '../src/api-execution.js';
+
+export {executePageApiRequest};
 
 const KATA_BASE='https://kata-webmcp.vercel.app';
 const MCP_VERSION='2026-07-28';
@@ -56,6 +59,34 @@ export async function compileAuthorizedTabApiTools(tab,options={},deps={}){
   return{ok:true,compilation,discovery:{descriptions:discovery.descriptions,resources:discovery.resources,evidence:discovery.evidence,limits:discovery.limits},runtime:{origin:probe.runtime.origin},evidence:probe.evidence??[]};
 }
 
+async function freshApiCandidate(tab,operationName,options,deps){
+  if(typeof operationName!=='string'||!operationName)throw new TypeError('A compiled OpenAPI operation name is required.');
+  const compiled=await compileAuthorizedTabApiTools(tab,options,deps);const matches=(compiled.compilation?.tools??[]).filter(tool=>tool?.name===operationName);
+  if(matches.length!==1)throw new Error(matches.length?`OpenAPI operation name is ambiguous: ${operationName}`:`OpenAPI operation is no longer available: ${operationName}`);
+  return{compiled,candidate:matches[0]};
+}
+
+export async function previewAuthorizedTabApiExecution(tab,operationName,args={},options={},deps={}){
+  const page=assertInspectableTab(tab),{compiled,candidate}=await freshApiCandidate(tab,operationName,options,deps);
+  const preview=buildAuthorizedExecutionPreview(candidate,args,compiled.runtime?.origin??page.origin,options);
+  const previewFingerprint=await fingerprintExecutionPreview(preview,deps.cryptoImpl??globalThis.crypto);
+  return{ok:true,preview,previewFingerprint,operation:{name:candidate.name,description:candidate.description??null},evidence:compiled.evidence??[]};
+}
+
+export async function executeAuthorizedTabApiExecution(tab,operationName,args={},expectedFingerprint,options={},deps={}){
+  if(options.approved!==true)throw new Error('Explicit approval is required before an API operation can execute.');
+  const fresh=await previewAuthorizedTabApiExecution(tab,operationName,args,options,deps);
+  if(typeof expectedFingerprint!=='string'||expectedFingerprint!==fresh.previewFingerprint)throw new Error('Execution preview fingerprint is stale or does not match the freshly discovered API contract.');
+  if(!fresh.preview.readyToExecute)throw new Error(`API execution is blocked: ${fresh.preview.blockedReason??'policy_blocked'}`);
+  const chromeApi=deps.chromeApi??globalThis.chrome;if(!chromeApi?.scripting?.executeScript)throw new Error('chrome.scripting is unavailable.');
+  const request=executionRequestFromPreview(fresh.preview);
+  const injected=await chromeApi.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',func:executePageApiRequest,args:[request]});const response=injected?.[0]?.result;
+  if(!response||typeof response!=='object')throw new Error('The page API executor did not return a valid bounded result.');
+  const receipt={previewFingerprint:fresh.previewFingerprint,operationName,method:fresh.preview.method,stateChanging:fresh.preview.stateChanging,requiresAuthorization:fresh.preview.requiresAuthorization,status:response.status??null,targetOk:Boolean(response.ok),outcome:response.outcome??'unknown',bytes:Number(response.bytes??0),contentType:response.contentType??null,truncated:Boolean(response.truncated),durationMs:Number(response.durationMs??0)};
+  const completed=receipt.outcome==='completed';
+  return{ok:completed,attempted:true,error:completed?null:`API execution outcome is unknown${response.networkError?`: ${response.networkError}`:''}. Do not retry automatically because the target may have committed the operation.`,receipt,response};
+}
+
 export async function inspectAuthorizedTab(tab,intent='read',deps={}){
   const chromeApi=deps.chromeApi??globalThis.chrome;const fetchImpl=deps.fetchImpl??globalThis.fetch;const kataBase=String(deps.kataBase??KATA_BASE).replace(/\/$/,'');assertIntent(intent);assertInspectableTab(tab);if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');
   const probe=await runtimeProbeForTab(tab,chromeApi);
@@ -66,5 +97,7 @@ async function activeTab(){const tabs=await globalThis.chrome.tabs.query({active
 async function inspectFromPopup(message){return inspectAuthorizedTab(await activeTab(),message.intent??'read');}
 async function inspectMcpFromPopup(message){const local=await inspectMcpEndpoint(await activeTab(),message.endpoint??'/mcp');try{return{...local,diagnosis:await diagnoseMcpEvidence(local.environment)};}catch(error){return{...local,diagnosis:null,diagnosisError:String(error?.message??error)};}}
 async function compileApiFromPopup(message){return compileAuthorizedTabApiTools(await activeTab(),{includeWellKnownCatalog:message.includeWellKnownCatalog!==false,maxDescriptions:message.maxDescriptions??3,maxTools:message.maxTools??50});}
+async function previewApiFromPopup(message){return previewAuthorizedTabApiExecution(await activeTab(),message.operationName,message.arguments??{},{includeWellKnownCatalog:message.includeWellKnownCatalog!==false,maxDescriptions:message.maxDescriptions??3,maxTools:message.maxTools??50,timeoutMs:message.timeoutMs,maxResponseBytes:message.maxResponseBytes});}
+async function executeApiFromPopup(message){return executeAuthorizedTabApiExecution(await activeTab(),message.operationName,message.arguments??{},message.expectedFingerprint,{approved:message.approved===true,includeWellKnownCatalog:message.includeWellKnownCatalog!==false,maxDescriptions:message.maxDescriptions??3,maxTools:message.maxTools??50,timeoutMs:message.timeoutMs,maxResponseBytes:message.maxResponseBytes});}
 
-if(globalThis.chrome?.runtime?.onMessage){globalThis.chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{if(message?.type==='inspect-active-tab')inspectFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='inspect-mcp-endpoint')inspectMcpFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='compile-api-tools')compileApiFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else return false;return true;});}
+if(globalThis.chrome?.runtime?.onMessage){globalThis.chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{if(message?.type==='inspect-active-tab')inspectFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='inspect-mcp-endpoint')inspectMcpFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='compile-api-tools')compileApiFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='preview-api-tool')previewApiFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='execute-api-tool')executeApiFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else return false;return true;});}
