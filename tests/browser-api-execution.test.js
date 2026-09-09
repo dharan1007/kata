@@ -49,6 +49,14 @@ test('active-tab API execution is preview-bound, same-origin, and requires a sec
   assert.equal(request.headers.Cookie,undefined);
 });
 
+test('execution validates the generated OpenAPI input schema and bounds request bodies before preview binding',async()=>{
+  const chrome=chromeApi();
+  await assert.rejects(()=>worker.previewAuthorizedTabApiExecution(TAB,'updateItem',{path:{id:7},body:{name:'x'}},{includeWellKnownCatalog:false},deps(chrome)),/schema|invalid.*arguments|string/i);
+  await assert.rejects(()=>worker.previewAuthorizedTabApiExecution(TAB,'updateItem',{path:{id:'1'},body:{name:'x',admin:true}},{includeWellKnownCatalog:false},deps(chrome)),/schema|invalid.*arguments|unexpected/i);
+  await assert.rejects(()=>worker.previewAuthorizedTabApiExecution(TAB,'updateItem',{path:{id:'1'},body:{name:'x'.repeat(300000)}},{includeWellKnownCatalog:false},deps(chrome)),/request.*large|body.*large/i);
+  assert.equal(chrome.calls.some(call=>call.func?.name==='executePageApiRequest'),false);
+});
+
 test('execution re-discovers the live contract and rejects a stale or forged preview fingerprint before page fetch',async()=>{
   assert.equal(typeof worker.executeAuthorizedTabApiExecution,'function');
   const chrome=chromeApi();
