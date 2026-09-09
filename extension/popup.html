@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KATA Inspector</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">KATA</p>
+      <h1>Interop Inspector</h1>
+      <p class="muted">Inspect only the tab you explicitly authorize. Page content and credentials are not sent to KATA.</p>
+    </header>
+    <label for="intent">Intent</label>
+    <select id="intent">
+      <option value="read">Read</option>
+      <option value="act">Act</option>
+      <option value="automate">Automate</option>
+      <option value="expose_webmcp">Expose WebMCP</option>
+      <option value="call_api">Call API</option>
+    </select>
+    <button id="inspect" type="button">Inspect current tab</button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="result" hidden>
+      <h2>Observed runtime</h2>
+      <dl id="runtime"></dl>
+      <h2>Recommended path</h2>
+      <div id="diagnosis"></div>
+      <h2>Restrictions and setup</h2>
+      <ul id="blockers"></ul>
+    </section>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
