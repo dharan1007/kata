@@ -6,13 +6,14 @@ test('WebMCP registers document.modelContext tools with abortable generations an
  const calls=[];const mc={async registerTool(tool,{signal}){calls.push({tool,signal});}};
  let ws={version:1,knownWorks:{},savedWorks:{},runs:{},activity:[]};
  const runtime={modelContext:mc,getWorkspace:()=>ws,setWorkspace:x=>{ws=x},search:async q=>({query:q}),summary:()=>({saved:0}),listAutomations:()=>[],runAutomation:async id=>({id}),listPrograms:()=>[{name:'learned_x',description:'x',inputSchema:{type:'object',properties:{workId:{type:'string'}},required:['workId'],additionalProperties:false}}],executeProgram:async(name,input)=>({name,input})};
- const r=createWebMcpRegistry(runtime);await r.refresh();assert.ok(calls.length>=6);const firstSignal=calls[0].signal;const learned=calls.find(x=>x.tool.name==='learned_x').tool;assert.deepEqual(await learned.execute({workId:'W1'}),{name:'learned_x',input:{workId:'W1'}});await r.refresh();assert.equal(firstSignal.aborted,true);r.dispose();assert.equal(calls.at(-1).signal.aborted,true);
+ const r=createWebMcpRegistry(runtime);await r.refresh();assert.ok(calls.length>=14);const firstSignal=calls[0].signal;const learned=calls.find(x=>x.tool.name==='learned_x').tool;assert.deepEqual(await learned.execute({workId:'W1'}),{name:'learned_x',input:{workId:'W1'}});await r.refresh();assert.equal(firstSignal.aborted,true);r.dispose();assert.equal(calls.at(-1).signal.aborted,true);
 });
 
-test('WebMCP forwards invocation AbortSignal to network-backed runtime operations',async()=>{
+test('WebMCP forwards invocation AbortSignal to canonical, browser-state and learned operations',async()=>{
  const registered=[];const mc={async registerTool(tool){registered.push(tool);}};const seen={};
  const runtime={
   modelContext:mc,
+  invokeCanonical:async(name,args,options)=>{seen.canonical={name,args,options};return{name};},
   search:async(query,limit,source,options)=>{seen.search={query,limit,source,options};return{query};},
   summary:()=>({}),listAutomations:()=>[],
   runAutomation:async(id,source,works,options)=>{seen.automation={id,source,works,options};return{id};},
@@ -21,8 +22,11 @@ test('WebMCP forwards invocation AbortSignal to network-backed runtime operation
  };
  const registry=createWebMcpRegistry(runtime);await registry.refresh();const controller=new AbortController();const context={signal:controller.signal};
  await registered.find(x=>x.name==='kata_search_research').execute({query:'agents',limit:3},context);
- await registered.find(x=>x.name==='kata_run_automation').execute({automationId:'a1'},context);
+ await registered.find(x=>x.name==='kata_browser_search_and_load_research').execute({query:'agents',limit:3},context);
+ await registered.find(x=>x.name==='kata_browser_run_saved_automation').execute({automationId:'a1'},context);
  await registered.find(x=>x.name==='learned_x').execute({},context);
+ assert.equal(seen.canonical.name,'kata_search_research');
+ assert.equal(seen.canonical.options?.signal,controller.signal);
  assert.equal(seen.search.options?.signal,controller.signal);
  assert.equal(seen.automation.options?.signal,controller.signal);
  assert.equal(seen.program.options?.signal,controller.signal);
@@ -37,7 +41,7 @@ test('WebMCP cross-origin exposure accepts potentially trustworthy local develop
   search:async()=>({}),summary:()=>({}),listAutomations:()=>[],runAutomation:async()=>({}),listPrograms:()=>[],executeProgram:async()=>({})
  };
  const registry=createWebMcpRegistry(runtime);await registry.refresh();
- assert.ok(calls.length>=5);
+ assert.ok(calls.length>=13);
  for(const call of calls){
   assert.deepEqual(call.options.exposedTo,['https://agent.example','https://partner.example','http://localhost:3000','http://127.0.0.1:5173','http://[::1]:4173']);
   assert.equal(call.options.exposedTo.includes('*'),false);
