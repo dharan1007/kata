@@ -103,6 +103,17 @@ test('fails closed for unsupported MRTR sampling/roots requests instead of fabri
   }
 });
 
+test('rejects nested MCP form schemas instead of accepting a non-protocol elicitation contract',async()=>{
+  const original=buildMcpToolCallPreview(candidate(),{accountId:'acct-7'},'https://example.com/mcp');
+  const originalFingerprint=await fingerprintMcpToolCallPreview(original);
+  const nested={
+    resultType:'input_required',
+    inputRequests:{profile:{method:'elicitation/create',params:{mode:'form',message:'Profile',requestedSchema:{type:'object',properties:{profile:{type:'object',properties:{name:{type:'string'}},required:['name']}}}}}},
+    requestState:'opaque'
+  };
+  assert.throws(()=>buildMcpInputContinuationPreview(original,originalFingerprint,nested,{profile:{action:'accept',content:{profile:{name:'Ada'}}}},{round:1}),/unsupported.*form elicitation schema|primitive|nested/i);
+});
+
 test('validates form responses, requires exact response keys, and enforces the ten-round cap',async()=>{
   const original=buildMcpToolCallPreview(candidate(),{accountId:'acct-7'},'https://example.com/mcp');
   const originalFingerprint=await fingerprintMcpToolCallPreview(original);
