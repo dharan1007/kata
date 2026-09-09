@@ -141,14 +141,13 @@ test('MCP optional bearer auth and origin allowlist are enforced',async()=>{
  req.headers.authorization='Bearer secret'; const c=await handleMcpRequest(req,{env}); assert.equal(c.status,200);
 });
 
-test('MCP 2026-07-28 returns Invalid Params for unsupported protocol-version negotiation and fallback',async()=>{
+test('MCP 2026-07-28 returns the dedicated UnsupportedProtocolVersion error for negotiation and fallback',async()=>{
  const requested='2027-01-01';
  const response=await handleMcpRequest({
   headers:{'mcp-protocol-version':requested,'mcp-method':'server/discover'},
   body:{jsonrpc:'2.0',id:40,method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':requested,'io.modelcontextprotocol/clientCapabilities':{}}}}
  });
  assert.equal(response.status,400);
- assert.equal(response.body.error.code,-32602);
- assert.equal(response.body.error.message,'Unsupported MCP protocol version');
+ assert.equal(response.body.error.code,-32022);
  assert.deepEqual(response.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
 });
