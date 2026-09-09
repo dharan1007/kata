@@ -1,4 +1,6 @@
 import {inspectBrowserRuntime} from '../src/runtime-probe.js';
+import {discoverBrowserApis} from '../src/api-discovery.js';
+import {compileOpenApiCandidates} from '../src/api-adapter.js';
 
 const KATA_BASE='https://kata-webmcp.vercel.app';
 const MCP_VERSION='2026-07-28';
@@ -40,14 +42,29 @@ export async function diagnoseMcpEvidence(mcpEnvironment,deps={}){
   if(!response?.ok)throw new Error(`KATA diagnosis service returned HTTP ${response?.status??'unknown'}.`);const payload=await response.json();if(!payload?.ok||!payload?.result)throw new Error('KATA diagnosis service returned an invalid diagnosis payload.');return payload.result;
 }
 
+async function runtimeProbeForTab(tab,chromeApi){
+  assertInspectableTab(tab);if(!chromeApi?.scripting?.executeScript)throw new Error('chrome.scripting is unavailable.');
+  const injected=await chromeApi.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',func:inspectBrowserRuntime,args:[{}]});const probe=injected?.[0]?.result;
+  if(!probe?.environment||!probe?.runtime)throw new Error('The page runtime probe did not return a valid KATA evidence snapshot.');return probe;
+}
+
+export async function compileAuthorizedTabApiTools(tab,options={},deps={}){
+  const chromeApi=deps.chromeApi??globalThis.chrome,fetchImpl=deps.fetchImpl??globalThis.fetch;assertInspectableTab(tab);if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');
+  const probe=await runtimeProbeForTab(tab,chromeApi);
+  const discovery=await discoverBrowserApis({declaredApiDescriptions:probe.runtime.declaredApiDescriptions,includeWellKnownCatalog:options.includeWellKnownCatalog!==false,maxDescriptions:options.maxDescriptions??3,signal:options.signal},{origin:probe.runtime.origin,fetch:fetchImpl});
+  const compilation=compileOpenApiCandidates(discovery,{maxTools:options.maxTools??50});
+  return{ok:true,compilation,discovery:{descriptions:discovery.descriptions,resources:discovery.resources,evidence:discovery.evidence,limits:discovery.limits},runtime:{origin:probe.runtime.origin},evidence:probe.evidence??[]};
+}
+
 export async function inspectAuthorizedTab(tab,intent='read',deps={}){
-  const chromeApi=deps.chromeApi??globalThis.chrome;const fetchImpl=deps.fetchImpl??globalThis.fetch;const kataBase=String(deps.kataBase??KATA_BASE).replace(/\/$/,'');assertIntent(intent);assertInspectableTab(tab);if(!chromeApi?.scripting?.executeScript)throw new Error('chrome.scripting is unavailable.');if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');
-  const injected=await chromeApi.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',func:inspectBrowserRuntime,args:[{}]});const probe=injected?.[0]?.result;if(!probe?.environment||!probe?.runtime)throw new Error('The page runtime probe did not return a valid KATA evidence snapshot.');
+  const chromeApi=deps.chromeApi??globalThis.chrome;const fetchImpl=deps.fetchImpl??globalThis.fetch;const kataBase=String(deps.kataBase??KATA_BASE).replace(/\/$/,'');assertIntent(intent);assertInspectableTab(tab);if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');
+  const probe=await runtimeProbeForTab(tab,chromeApi);
   const environment={...probe.environment,userAuthorizedBrowserFlow:true};const body={name:'kata_diagnose_web_interop',arguments:{intent,environment}};let response;try{response=await fetchImpl(`${kataBase}/api/invoke`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'omit',cache:'no-store'});}catch(error){return localFailure(new Error(`KATA diagnosis request failed: ${error?.message??error}`),probe);}if(!response?.ok)return localFailure(new Error(`KATA diagnosis service returned HTTP ${response?.status??'unknown'}.`),probe);let payload;try{payload=await response.json();}catch{return localFailure(new Error('KATA diagnosis service returned an invalid JSON response.'),probe);}if(!payload?.ok||!payload?.result)return localFailure(new Error('KATA diagnosis service returned an invalid diagnosis payload.'),probe);return{ok:true,runtime:probe.runtime,evidence:probe.evidence??[],diagnosis:payload.result};
 }
 
 async function activeTab(){const tabs=await globalThis.chrome.tabs.query({active:true,currentWindow:true});return tabs?.[0];}
 async function inspectFromPopup(message){return inspectAuthorizedTab(await activeTab(),message.intent??'read');}
 async function inspectMcpFromPopup(message){const local=await inspectMcpEndpoint(await activeTab(),message.endpoint??'/mcp');try{return{...local,diagnosis:await diagnoseMcpEvidence(local.environment)};}catch(error){return{...local,diagnosis:null,diagnosisError:String(error?.message??error)};}}
+async function compileApiFromPopup(message){return compileAuthorizedTabApiTools(await activeTab(),{includeWellKnownCatalog:message.includeWellKnownCatalog!==false,maxDescriptions:message.maxDescriptions??3,maxTools:message.maxTools??50});}
 
-if(globalThis.chrome?.runtime?.onMessage){globalThis.chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{if(message?.type==='inspect-active-tab')inspectFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='inspect-mcp-endpoint')inspectMcpFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else return false;return true;});}
+if(globalThis.chrome?.runtime?.onMessage){globalThis.chrome.runtime.onMessage.addListener((message,_sender,sendResponse)=>{if(message?.type==='inspect-active-tab')inspectFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='inspect-mcp-endpoint')inspectMcpFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else if(message?.type==='compile-api-tools')compileApiFromPopup(message).then(sendResponse,error=>sendResponse({ok:false,error:String(error?.message??error)}));else return false;return true;});}
