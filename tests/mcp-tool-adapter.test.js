@@ -32,7 +32,7 @@ test('lists modern MCP tools with bounded pagination, required metadata, and no 
     {resultType:'complete',tools:[tool],nextCursor:'next',ttlMs:5000,cacheScope:'private'},
     {resultType:'complete',tools:[{...tool,name:'other'}],ttlMs:5000,cacheScope:'private'}
   ];
-  const fetchImpl=async(url,init)=>{calls.push({url,init,body:JSON.parse(init.body)});const result=pages[calls.length-1];return{ok:true,status:200,json:async()=>({jsonrpc:'2.0',id:calls.length,result})};};
+  const fetchImpl=async(url,init)=>{const body=JSON.parse(init.body);calls.push({url,init,body});const result=pages[calls.length-1];return{ok:true,status:200,json:async()=>({jsonrpc:'2.0',id:body.id,result})};};
   const result=await listModernMcpTools('https://example.com/mcp',{fetchImpl,maxPages:4,maxTools:10});
   assert.deepEqual(result.tools.map(x=>x.name),['lookup.user','other']);
   assert.equal(calls.length,2);
