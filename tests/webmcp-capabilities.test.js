@@ -30,4 +30,20 @@ test('/api/capabilities publishes canonical WebMCP parity, runtime probing, API 
   ]);
   assert.equal(r.body.capabilities.interop.decisionModel,'evidence-capability-graph');
   assert.equal(r.body.capabilities.interop.unknownIsAuthorization,false);
+  assert.deepEqual(r.body.capabilities.interop.browserExtension,{
+    mode:'manifest-v3-active-tab',
+    repositoryPath:'extension',
+    builtArtifactPath:'dist/extension',
+    minimumChromeVersion:95,
+    permissions:['activeTab','scripting'],
+    hostPermissions:['https://kata-webmcp.vercel.app/*'],
+    userGestureRequired:true,
+    executionWorld:'MAIN',
+    canonicalProbe:'inspectBrowserRuntime',
+    topFrameOnly:true,
+    supportedIntents:['read','act','automate','expose_webmcp','call_api'],
+    outboundToKata:['intent','environment'],
+    localOnly:['url','origin','frameworkHints','domTopology','declaredApiDescriptions','evidence'],
+    persistentThirdPartyHostAccess:false
+  });
 });
