@@ -26,7 +26,9 @@ export function createSessionVault(storageArea,cryptoImpl=globalThis.crypto,now=
   async function putCredential(input){
     if(!input||typeof input!=='object')throw new TypeError('A credential record is required.');
     const origin=originOf(input.origin),kind=safeString(input.kind,'Credential kind',64);if(!CREDENTIAL_KINDS.has(kind))throw new TypeError('Credential kind is not supported.');
-    const secret=safeString(input.secret,'Credential secret',MAX_SECRET_BYTES);if(utf8Bytes(secret)>MAX_SECRET_BYTES)throw new TypeError('Credential secret is too large.');
+    if(typeof input.secret!=='string'||!input.secret)throw new TypeError('Credential secret is invalid.');
+    if(utf8Bytes(input.secret)>MAX_SECRET_BYTES)throw new TypeError('Credential secret is too large.');
+    const secret=input.secret;
     const schemeName=input.schemeName==null?null:safeString(input.schemeName,'Credential scheme name',256);
     let location=null,parameterName=null;
     if(kind==='api-key'){
@@ -71,7 +73,7 @@ export function createSessionVault(storageArea,cryptoImpl=globalThis.crypto,now=
       if(!existing&&Object.keys(state.tasks).length>=MAX_TASKS)throw new Error('Session task limit exceeded.');
       if(existing&&existing.origin!==origin)throw new Error('MCP task origin cannot change.');
       const timestamp=Number(now());
-      const record={...clone(input),vaultTaskId,endpoint,newTask:false,origin,taskId,vaultCreatedAt:existing?.vaultCreatedAt??timestamp,vaultUpdatedAt:timestamp};
+      const record={...clone(input),vaultTaskId,endpoint,origin,taskId,vaultCreatedAt:existing?.vaultCreatedAt??timestamp,vaultUpdatedAt:timestamp};
       state.tasks[vaultTaskId]=record;
       return taskDescriptor(record);
     });
