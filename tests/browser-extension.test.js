@@ -40,7 +40,7 @@ test('browser bridge is Manifest V3 with temporary active-tab access plus sessio
   assert.equal(serialized.includes('https://*/'),false);
   for(const forbidden of ['cookies','webRequest','debugger','history','downloads','nativeMessaging','clipboardRead','clipboardWrite','identity','alarms'])assert.equal(m.permissions.includes(forbidden),false,`forbidden permission ${forbidden}`);
   assert.equal(m.background?.type,'module');
-  assert.equal(m.background?.service_worker,'service-worker.js');
+  assert.equal(m.background?.service_worker,'service-worker-entry.js');
   assert.equal(m.action?.default_popup,'popup.html');
 });
 
