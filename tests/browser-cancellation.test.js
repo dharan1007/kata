@@ -23,7 +23,7 @@ async function withRestoredGlobals(run){
  finally{for(const name of GLOBALS){const descriptor=saved.get(name);if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 }
 
-test('aborting a WebMCP search aborts the underlying fetch and prevents workspace commit',async()=>withRestoredGlobals(async()=>{
+test('aborting a browser-state WebMCP search aborts the underlying fetch and prevents workspace commit',async()=>withRestoredGlobals(async()=>{
  const store=new Map(),tools=new Map();let searchSignal=null;let app;
  try{
   const root=installBrowserHarness({store,tools,fetchImpl:(path,options={})=>{
@@ -41,7 +41,7 @@ test('aborting a WebMCP search aborts the underlying fetch and prevents workspac
    throw new Error(`UNEXPECTED_FETCH:${path}`);
   }});
   app=createApp(root);await new Promise(resolve=>setImmediate(resolve));
-  const searchTool=tools.get('kata_search_research');assert.ok(searchTool,'search tool registered');
+  const searchTool=tools.get('kata_browser_search_and_load_research');assert.ok(searchTool,'browser-state search tool registered');
   const controller=new AbortController();const execution=searchTool.execute({query:'cancel me',limit:1},{signal:controller.signal});controller.abort();
   await assert.rejects(execution,error=>error?.name==='AbortError');
   assert.equal(searchSignal,controller.signal);
@@ -50,7 +50,7 @@ test('aborting a WebMCP search aborts the underlying fetch and prevents workspac
  } finally {app?.dispose();}
 }));
 
-test('cancelling during AFTER_SEARCH automation rolls back the whole WebMCP search transaction',async()=>withRestoredGlobals(async()=>{
+test('cancelling during AFTER_SEARCH automation rolls back the whole browser-state WebMCP search transaction',async()=>withRestoredGlobals(async()=>{
  const store=new Map(),tools=new Map();let app;let runSignal=null;let runStartedResolve;
  const runStarted=new Promise(resolve=>{runStartedResolve=resolve;});
  const initial={
@@ -75,7 +75,7 @@ test('cancelling during AFTER_SEARCH automation rolls back the whole WebMCP sear
    throw new Error(`UNEXPECTED_FETCH:${path}`);
   }});
   app=createApp(root);await new Promise(resolve=>setImmediate(resolve));
-  const searchTool=tools.get('kata_search_research');assert.ok(searchTool,'search tool registered');
+  const searchTool=tools.get('kata_browser_search_and_load_research');assert.ok(searchTool,'browser-state search tool registered');
   const controller=new AbortController();const execution=searchTool.execute({query:'atomic cancel',limit:1},{signal:controller.signal});
   await runStarted;controller.abort();
   await assert.rejects(execution,error=>error?.name==='AbortError');

@@ -25,6 +25,13 @@ test('README MCP request example includes the required Streamable HTTP Accept co
 
 test('browser source prefers document.modelContext and retains the transitional navigator fallback',()=>{const src=fs.readFileSync(new URL('../src/webmcp.js',import.meta.url),'utf8');const documentIndex=src.indexOf('document?.modelContext');const navigatorIndex=src.indexOf('navigator?.modelContext');assert.notEqual(documentIndex,-1);assert.notEqual(navigatorIndex,-1);assert.ok(documentIndex<navigatorIndex,'document.modelContext must remain the canonical first choice');});
 
+test('browser WebMCP canonical contract module is packaged as an integrity-bound production asset',()=>{
+  const build=fs.readFileSync(new URL('../scripts/build.mjs',import.meta.url),'utf8');
+  const webmcp=fs.readFileSync(new URL('../src/webmcp.js',import.meta.url),'utf8');
+  assert.match(webmcp,/\.\.\/lib\/shared\/tool-contracts\.js/);
+  assert.match(build,/lib\/shared\/tool-contracts\.js/);
+});
+
 test('public api directory contains endpoint modules only',()=>{
   const apiDir=new URL('../api/',import.meta.url);
   const entries=fs.readdirSync(apiDir,{withFileTypes:true});
