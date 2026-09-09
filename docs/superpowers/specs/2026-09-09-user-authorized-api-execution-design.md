@@ -16,6 +16,8 @@ KATA never accepts an arbitrary execution URL. The operation must be re-derived 
 
 The request preview excludes forbidden credential and transport headers already blocked by `api-adapter.js`. For operations without declared OpenAPI security, execution uses `credentials: omit`. When the contract declares security, KATA may use only browser-managed same-origin credentials with `credentials: same-origin`; it does not read cookies, localStorage, sessionStorage, password stores, or bearer/API-key material and does not synthesize authorization headers. If the site's authenticated API requires JavaScript-managed bearer headers or anti-CSRF material not declared as safe operation input, the request fails normally and KATA reports that authorization/setup is not established.
 
+Execution validates generated arguments against KATA's canonical shared JSON Schema validator before fingerprinting. Only a bounded schema vocabulary KATA can enforce precisely is executable; unsupported union/composition/schema constructs remain discoverable/compilable but fail closed at the execution boundary. Request size is bounded independently of schema metadata: 16 KiB URL, 32 KiB aggregate declared headers, and 256 KiB body.
+
 All methods require an explicit second execution action after preview. State-changing methods (`POST`, `PUT`, `PATCH`, `DELETE` and non-safe custom methods) are marked as such in the preview and cannot execute without `approved: true`. No automatic retries are allowed because the operation's idempotency cannot be assumed.
 
 ## Preview binding
@@ -26,16 +28,18 @@ The preview fingerprint is SHA-256 over a canonical JSON serialization of the cu
 
 `executePageApiRequest(request, runtime)` is a closure-free function suitable for `chrome.scripting.executeScript({world:'MAIN'})`. It validates the request URL against `location.origin`, permits only HTTP(S), enforces `redirect:'error'`, applies a bounded timeout, uses no-store cache semantics, reads at most the configured response byte budget, and returns a bounded result containing status, final URL, content type, byte count, truncation state and response text. It never returns cookies or browser credential material.
 
-The first release caps response bodies at 1 MiB and timeouts at 15 seconds by default, with hard bounds below those values when callers request tighter limits. Streaming API media remains discoverable but this execution slice returns a bounded response snapshot rather than claiming durable streaming support.
+The first release caps response snapshots at 1 MiB and timeouts at 15 seconds by default, with hard bounds below those values when callers request tighter limits. Streaming API media remains discoverable but this execution slice returns a bounded response snapshot rather than claiming durable streaming support.
 
-## Receipt
+## Receipt and uncertain mutation semantics
 
-Successful or failed target responses produce a local execution receipt containing preview fingerprint, operation name, method, status, byte count, content type and whether the operation was state-changing. Network/policy failures return an explicit error and do not invent a successful receipt. Receipts are local to the extension in this release and are not uploaded to KATA.
+A target response produces a local execution receipt containing preview fingerprint, operation name, method, status, byte count, content type, state-changing classification and outcome. HTTP error statuses are still completed transport outcomes and remain visible as target failures.
+
+A timeout, aborted network path or equivalent failure after the request has been handed to Fetch is different: KATA cannot prove whether the remote service committed a mutation. Such attempts return `ok:false`, `attempted:true`, `outcome:'unknown'` and a preview-bound attempt receipt. The UX explicitly warns not to retry automatically. KATA never converts an indeterminate mutation into either a successful receipt or a definite failure. Receipts are local to the extension in this release and are not uploaded to KATA.
 
 ## UX
 
-The popup keeps API discovery/compilation local. After compilation the user selects an operation, supplies JSON arguments, and requests a preview. The UI shows method, exact URL, authorization mode, state-changing status and fingerprint. Only then is the Execute control enabled. Execution uses the same operation name and arguments and requires the displayed fingerprint. The UI renders result/receipt with `textContent`; no remote HTML is injected.
+The popup keeps API discovery/compilation local. After compilation the user selects an operation, supplies JSON arguments, and requests a preview. The UI shows method, exact URL, authorization mode, state-changing status and fingerprint. Only then is the Execute control enabled. Execution uses the same operation name and arguments and requires the displayed fingerprint. The UI renders results and receipts with `textContent`; no remote HTML is injected. An unknown execution outcome remains visible together with its attempt receipt after the preview is consumed.
 
 ## Verification
 
-Release tests must prove: RED before implementation; same-origin preview and mutation approval; fresh rediscovery and stale-fingerprint rejection; cross-origin non-executability; MAIN-world execution; no Authorization/Cookie argument injection; same-origin browser-managed credential mode only when security is declared; redirect/timeout/response bounds; exact receipt binding; UI presence of preview/execute controls; and build/static integrity parity for the canonical execution module packaged into the extension.
+Release tests must prove: RED before implementation; same-origin preview and mutation approval; generated-schema validation and request-size limits; fresh rediscovery and stale-fingerprint rejection; cross-origin non-executability; MAIN-world execution; no Authorization/Cookie argument injection; same-origin browser-managed credential mode only when security is declared; redirect/timeout/response bounds; indeterminate mutation outcome/receipt semantics; exact receipt binding; UI presence of preview/execute controls; and build/static integrity parity for the canonical execution module packaged into the extension.
