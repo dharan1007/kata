@@ -83,18 +83,13 @@ test('runtime probe does not convert unavailable policy introspection into permi
 
 test('runtime probe caps DOM traversal on very large applications and reports truncation',()=>{
   let childReads=0;
-  const makeNode=()=>({
-    shadowRoot:null,
-    get children(){
-      childReads++;
-      return Array.from({length:32},()=>makeNode());
-    }
-  });
+  const leaves=Array.from({length:256},()=>({shadowRoot:null,get children(){childReads++;return[];}}));
+  const root={shadowRoot:null,get children(){childReads++;return leaves;}};
   const document={
     URL:'https://large.example.test/app',
     modelContext:{registerTool(){}},
     permissionsPolicy:{allowsFeature(){return true;}},
-    documentElement:makeNode(),
+    documentElement:root,
     querySelector(){return null;},
     querySelectorAll(){return[];}
   };
