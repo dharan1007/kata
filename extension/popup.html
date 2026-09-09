@@ -62,6 +62,17 @@
         <label id="mcp-approval-label" class="approval" hidden><input id="mcp-execution-approval" type="checkbox"> I approve this MCP tool call exactly as previewed.</label>
         <button id="execute-mcp-tool" type="button" disabled>Execute previewed MCP call</button>
         <div id="mcp-execution" hidden></div>
+        <div id="mcp-input-required" hidden>
+          <h3>Server requires explicit input</h3>
+          <p class="muted">KATA never auto-answers this round. Review the server request, provide only the current round responses, preview again, then explicitly approve the resumed call.</p>
+          <pre id="mcp-input-requests"></pre>
+          <label for="mcp-input-responses">Current-round input responses (JSON)</label>
+          <textarea id="mcp-input-responses" rows="7" spellcheck="false">{}</textarea>
+          <button id="preview-mcp-resume" type="button">Preview resumed MCP round</button>
+          <div id="mcp-resume-preview" hidden></div>
+          <label id="mcp-resume-approval-label" class="approval" hidden><input id="mcp-resume-approval" type="checkbox"> I approve this resumed MCP round exactly as previewed.</label>
+          <button id="execute-mcp-resume" type="button" disabled>Execute resumed MCP round</button>
+        </div>
       </div>
     </section>
     <p id="status" role="status" aria-live="polite"></p>

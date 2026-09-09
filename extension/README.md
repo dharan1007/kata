@@ -72,26 +72,40 @@ The executable adapter intentionally supports a bounded input-schema subset rath
 
 Every tool call uses **Preview exact MCP call** followed by a separate approval and **Execute previewed MCP call**. Previewing creates a SHA-256 fingerprint over the endpoint, tool identity, arguments, input/output contract, mirrored routing headers and execution policy. Immediately before execution KATA re-runs `server/discover`, re-lists the live tool inventory, recompiles the tool, and regenerates the fingerprint. Any contract or argument drift fails before `tools/call` starts.
 
+MCP 2026-07-28 `input_required` is supported through an explicitly driven multi-round flow. KATA does not answer input requests automatically. When a call returns `input_required`, the extension displays the current `inputRequests`, keeps the opaque `requestState` local, and requires the user to provide the current round `inputResponses`. **Preview resumed MCP round** re-runs `server/discover` and `tools/list`, validates the current elicitation response against the requested schema, and produces a new SHA-256-bound preview. **Execute resumed MCP round** requires a new explicit approval and echoes the server's opaque `requestState` unchanged. If the server returns another `input_required`, the same process repeats with a fresh preview and approval.
+
+The multi-round driver is intentionally bounded and conservative:
+
+- at most 10 total rounds are accepted;
+- at most 16 input requests are accepted per round;
+- opaque `requestState` is bounded to 64 KiB and is never interpreted as authorization or executable data;
+- only `elicitation/create` input requests are supported by this user-facing driver;
+- `accept`, `decline`, and `cancel` are explicit user choices; only `accept` may carry schema-validated content;
+- only the current round's input responses are sent on a resume; prior-round responses are not accumulated;
+- URL-mode elicitation is not followed automatically;
+- sampling and roots input requests are not auto-fulfilled;
+- every resumed round has a new preview fingerprint and explicit approval;
+- there is no automatic retry of the original or resumed tool call.
+
 MCP execution remains deliberately narrow:
 
 - only public modern same-origin endpoints can execute;
 - `credentials: omit` is mandatory for `server/discover`, `tools/list`, and `tools/call`;
 - no cookie, bearer token, API key, browser-storage value or ambient session credential is borrowed;
-- every tool invocation requires explicit approval, regardless of tool annotations;
+- every tool invocation and every resumed input round requires explicit approval, regardless of tool annotations;
 - redirects are not automatically followed and calls are never automatically retried;
 - response bodies are bounded to 1 MiB for both JSON and SSE transport responses;
 - supported structured outputs are validated against KATA's declared validator subset and the receipt states the exact validation status;
-- `input_required` is surfaced as unresolved input, not silently fulfilled or retried;
 - OAuth-protected servers remain setup-required; this path does not start OAuth;
 - legacy MCP remains inspection-only;
 - Tasks-extension-required tools remain non-executable;
-- tool contracts, previews, responses and receipts remain local to the extension.
+- tool contracts, previews, `input_required` continuations, input responses, responses and receipts remain local to the extension.
 
 This design intentionally avoids a generic KATA server-side URL probe or arbitrary remote MCP executor, which would create SSRF, credential-forwarding and confused-deputy surfaces. The active-tab permission supplies the user authorization and confines discovery/execution to the website the user is currently viewing.
 
 ## What leaves the browser
 
-Only the normalized interoperability `environment` accepted by `kata_diagnose_web_interop` and the user-selected intent are sent to KATA. The current URL, framework hints, DOM topology, declared description URLs, compiled API tool contracts, API execution previews and receipts, MCP endpoint URL, MCP server identity/capabilities, authorization-server identifiers, MCP tool contracts/previews/receipts, page text, form values, cookies, browser storage and credentials remain local to the extension.
+Only the normalized interoperability `environment` accepted by `kata_diagnose_web_interop` and the user-selected intent are sent to KATA. The current URL, framework hints, DOM topology, declared description URLs, compiled API tool contracts, API execution previews and receipts, MCP endpoint URL, MCP server identity/capabilities, authorization-server identifiers, MCP tool contracts/previews/receipts, `input_required` continuations, input responses, page text, form values, cookies, browser storage and credentials remain local to the extension.
 
 ## Restrictions
 
