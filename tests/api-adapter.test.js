@@ -81,7 +81,7 @@ test('request preview validates required path/body inputs and never accepts auth
   const discovery=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async()=>response(DOCUMENT)});
   const {tools}=compileOpenApiCandidates(discovery);
   const getOrder=tools.find(x=>x.name==='getOrder');
-  assert.throws(()=>previewOpenApiRequest(getOrder,{query:{expand:'items'}}),/orderId/);
+  assert.throws(()=>previewOpenApiRequest(getOrder,{query:{expand:'items'}}),/path/);
   const preview=previewOpenApiRequest(getOrder,{path:{orderId:'abc 123'},query:{expand:'items'},headers:{'X-Trace-Mode':'debug'}});
   assert.equal(preview.method,'GET');
   assert.equal(preview.url,'https://app.test/api/orders/abc%20123?expand=items');
@@ -89,14 +89,17 @@ test('request preview validates required path/body inputs and never accepts auth
   assert.equal(preview.body,null);
   assert.equal(preview.requiresAuthorization,true);
   assert.equal(preview.readyToExecute,false);
+  const create=tools.find(x=>x.name==='createOrder');
+  assert.throws(()=>previewOpenApiRequest(create,{}),/body/);
 });
 
-test('rejects unsafe server templates and duplicate/invalid agent names instead of inventing executable endpoints',()=>{
+test('rejects unsafe server templates and invalid agent names instead of inventing executable endpoints',()=>{
   const discovery={descriptions:[{url:'https://app.test/openapi.json',servers:['javascript:alert(1)']}],operations:[
-    {method:'GET',path:'/x',operationId:'bad name with spaces',summary:null,security:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[],requestBody:null},
+    {method:'GET',path:'/x',operationId:'validName',summary:null,security:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[],requestBody:null},
     {method:'GET',path:'/y',operationId:'bad name with spaces',summary:null,security:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[],requestBody:null}
   ],securitySchemes:[]};
   const result=compileOpenApiCandidates(discovery);
   assert.equal(result.tools.length,0);
   assert.ok(result.rejected.some(x=>x.reason==='unsafe_or_unresolved_server'));
+  assert.ok(result.rejected.some(x=>x.reason==='invalid_agent_name'));
 });
