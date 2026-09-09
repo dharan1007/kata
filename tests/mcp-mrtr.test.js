@@ -63,7 +63,7 @@ test('builds and fingerprints an exact per-round elicitation continuation withou
   assert.equal(continuation.requestState,'opaque-state-1');
   assert.deepEqual(continuation.inputResponses,{confirm:{action:'accept',content:{confirm:true}}});
   assert.deepEqual(continuation.inputRequestKeys,['confirm']);
-  assert.equal(continuation.automaticRetry,false);
+  assert.equal(continuation.automaticRetries,false);
   assert.match(await fingerprintMcpInputContinuationPreview(continuation),/^[a-f0-9]{64}$/);
 });
 
