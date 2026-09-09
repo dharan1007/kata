@@ -7,7 +7,7 @@
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://kata-webmcp.vercel.app/*"],
   "background": {
-    "service_worker": "service-worker.js",
+    "service_worker": "service-worker-entry.js",
     "type": "module"
   },
   "action": {
