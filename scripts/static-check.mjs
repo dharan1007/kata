@@ -15,10 +15,10 @@ if(/\son[a-z]+\s*=/i.test(html)||/\sstyle\s*=/i.test(html))throw new Error('Inli
 const extensionHtml=fs.readFileSync(path.join(root,'extension/popup.html'),'utf8');
 if(/\son[a-z]+\s*=/i.test(extensionHtml)||/\sstyle\s*=/i.test(extensionHtml)||/<script(?![^>]*\bsrc=)[^>]*>/i.test(extensionHtml))throw new Error('Extension popup contains inline executable/style content');
 const extensionManifest=JSON.parse(fs.readFileSync(path.join(root,'extension/manifest.json'),'utf8'));
-if(extensionManifest.manifest_version!==3||Number(extensionManifest.minimum_chrome_version)!==95)throw new Error('Extension Manifest V3/minimum Chrome contract failed');
-if(JSON.stringify([...extensionManifest.permissions].sort())!==JSON.stringify(['activeTab','scripting']))throw new Error('Extension permission set drifted from activeTab+scripting');
+if(extensionManifest.manifest_version!==3||Number(extensionManifest.minimum_chrome_version)!==102)throw new Error('Extension Manifest V3/minimum Chrome 102 contract failed');
+if(JSON.stringify([...extensionManifest.permissions].sort())!==JSON.stringify(['activeTab','scripting','storage']))throw new Error('Extension permission set drifted from activeTab+scripting+storage');
 if(JSON.stringify(extensionManifest.host_permissions)!==JSON.stringify(['https://kata-webmcp.vercel.app/*']))throw new Error('Extension host permission must remain limited to canonical KATA production');
-const forbiddenExtensionPermissions=['cookies','webRequest','debugger','history','downloads','nativeMessaging','clipboardRead','clipboardWrite'];
+const forbiddenExtensionPermissions=['cookies','webRequest','debugger','history','downloads','nativeMessaging','clipboardRead','clipboardWrite','identity','alarms'];
 for(const permission of forbiddenExtensionPermissions)if(extensionManifest.permissions.includes(permission))throw new Error(`Forbidden extension permission ${permission}`);
 const manifestText=JSON.stringify(extensionManifest);
 if(manifestText.includes('<all_urls>')||manifestText.includes('https://*/')||manifestText.includes('http://*/'))throw new Error('Extension must not request broad host access');
