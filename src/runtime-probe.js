@@ -20,20 +20,34 @@ export function inspectBrowserRuntime(runtime={}){
     try{if(doc?.querySelector?.('[data-sveltekit-preload-data],[data-sveltekit-preload-code]'))push('SvelteKit','SvelteKit preload marker');}catch{}
     return hints;
   }
-  function domTopology(doc){
-    let openShadowRoots=0,iframes=0,accessibleFrames=0,inaccessibleFrames=0;
+  function boundedInt(value,fallback,min,max){
+    const n=Number(value);return Number.isInteger(n)?Math.max(min,Math.min(max,n)):fallback;
+  }
+  function domTopology(doc,maxInspectedNodes){
+    let openShadowRoots=0,iframes=0,accessibleFrames=0,inaccessibleFrames=0,inspectedNodes=0,truncated=false;
     const queue=[];
     try{if(doc?.documentElement)queue.push(doc.documentElement);}catch{}
-    while(queue.length){
-      const node=queue.shift();
-      try{if(node.shadowRoot){openShadowRoots++;queue.push(node.shadowRoot);}}catch{}
-      try{for(const child of node.children??[])queue.push(child);}catch{}
+    for(let cursor=0;cursor<queue.length&&inspectedNodes<maxInspectedNodes;cursor++){
+      const node=queue[cursor];inspectedNodes++;
+      try{
+        if(node.shadowRoot){
+          openShadowRoots++;
+          if(queue.length<maxInspectedNodes)queue.push(node.shadowRoot);else truncated=true;
+        }
+      }catch{}
+      try{
+        for(const child of node.children??[]){
+          if(queue.length>=maxInspectedNodes){truncated=true;break;}
+          queue.push(child);
+        }
+      }catch{}
     }
+    if(queue.length>inspectedNodes)truncated=true;
     try{
       const frames=Array.from(doc?.querySelectorAll?.('iframe')??[]);iframes=frames.length;
       for(const frame of frames){try{const root=frame.contentDocument?.documentElement;if(root)accessibleFrames++;else inaccessibleFrames++;}catch{inaccessibleFrames++;}}
     }catch{}
-    return{openShadowRoots,iframes,accessibleFrames,inaccessibleFrames};
+    return{openShadowRoots,iframes,accessibleFrames,inaccessibleFrames,inspectedNodes,maxInspectedNodes,truncated};
   }
   function declaredApis(doc){
     const out=[];
@@ -61,7 +75,8 @@ export function inspectBrowserRuntime(runtime={}){
 
   const doc=runtime.document??globalThis.document,win=runtime.window??globalThis.window,nav=runtime.navigator??globalThis.navigator;
   const environment=baseEnvironment({doc,win,nav});
-  const topology=domTopology(doc),apis=declaredApis(doc),cspMeta=metaCsp(doc);
+  const maxDomNodes=boundedInt(runtime.maxDomNodes,5000,32,20000);
+  const topology=domTopology(doc,maxDomNodes),apis=declaredApis(doc),cspMeta=metaCsp(doc);
   if(apis.length)environment.api='documented';
   const observedRuntime={
     url:win?.location?.href??doc?.URL??null,
@@ -72,7 +87,7 @@ export function inspectBrowserRuntime(runtime={}){
     declaredApiDescriptions:apis,
     cspMetaPresent:Boolean(cspMeta),
     cspMeta,
-    notes:['A service-desc/OpenAPI link establishes that a machine-readable service description is declared; it does not establish CORS, authentication, policy, quota, reachability, or permission to call that API.','CORS, response-header CSP, authentication, bot protection, rate limits and service terms are intentionally not inferred by this probe.']
+    notes:['A service-desc/OpenAPI link establishes that a machine-readable service description is declared; it does not establish CORS, authentication, policy, quota, reachability, or permission to call that API.','CORS, response-header CSP, authentication, bot protection, rate limits and service terms are intentionally not inferred by this probe.',topology.truncated?`DOM topology inspection stopped after ${topology.inspectedNodes} nodes at the configured safety bound; topology counts are partial evidence.`:'DOM topology inspection completed within the configured safety bound.']
   };
   const evidence=[
     {key:'frame',value:environment.frame,source:'browser-runtime',confidence:1},
@@ -80,7 +95,8 @@ export function inspectBrowserRuntime(runtime={}){
     {key:'toolsPermission',value:environment.toolsPermission,source:'browser-policy-introspection',confidence:environment.toolsPermission==='unknown'?0.25:1},
     {key:'api',value:environment.api,source:apis.length?'service-description-declaration':'browser-runtime',confidence:apis.length?1:0.25},
     {key:'secureContext',value:observedRuntime.secureContext,source:'browser-runtime',confidence:1},
-    {key:'declaredApiDescriptions',value:apis,source:'document-link-declarations',confidence:1}
+    {key:'declaredApiDescriptions',value:apis,source:'document-link-declarations',confidence:1},
+    {key:'domTopologyCoverage',value:topology.truncated?'partial':'complete',source:'browser-runtime',confidence:1}
   ];
   return{environment,runtime:observedRuntime,evidence};
 }

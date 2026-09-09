@@ -39,6 +39,7 @@ test('runtime probe derives directly observable browser evidence and leaves serv
   assert.equal(result.runtime.secureContext,true);
   assert.equal(result.runtime.dom.openShadowRoots,1);
   assert.equal(result.runtime.dom.accessibleFrames,1);
+  assert.equal(result.runtime.dom.truncated,false);
   assert.ok(result.runtime.frameworkHints.some(x=>x.name==='Next.js'));
   assert.deepEqual(result.runtime.declaredApiDescriptions,['https://example.test/openapi.json']);
   assert.equal(result.evidence.find(x=>x.key==='api').source,'service-description-declaration');
@@ -78,4 +79,24 @@ test('runtime probe does not convert unavailable policy introspection into permi
   const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true});
   assert.equal(result.environment.toolsPermission,'unknown');
   assert.equal(result.evidence.find(x=>x.key==='toolsPermission').confidence,0.25);
+});
+
+test('runtime probe caps DOM traversal on very large applications and reports truncation',()=>{
+  let childReads=0;
+  const leaves=Array.from({length:256},()=>({shadowRoot:null,get children(){childReads++;return[];}}));
+  const root={shadowRoot:null,get children(){childReads++;return leaves;}};
+  const document={
+    URL:'https://large.example.test/app',
+    modelContext:{registerTool(){}},
+    permissionsPolicy:{allowsFeature(){return true;}},
+    documentElement:root,
+    querySelector(){return null;},
+    querySelectorAll(){return[];}
+  };
+  const window={location:{href:'https://large.example.test/app',origin:'https://large.example.test'}};window.top=window;
+  const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true,maxDomNodes:128});
+  assert.equal(result.runtime.dom.truncated,true);
+  assert.equal(result.runtime.dom.inspectedNodes,128);
+  assert.equal(result.runtime.dom.maxInspectedNodes,128);
+  assert.ok(childReads<=128);
 });
