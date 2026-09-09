@@ -20,5 +20,14 @@ test('/api/capabilities truthfully publishes bounded manual MCP input_required s
   assert.equal(adapter.continuationSha256PreviewBinding,true);
   assert.equal(adapter.continuationExplicitApproval,true);
   assert.equal(adapter.automaticInputFulfillment,false);
-  assert.equal(r.body.capabilities.interop.browserExtension.mcpExecution.supportsInputRequired,false);
+
+  const extension=r.body.capabilities.interop.browserExtension.mcpExecution;
+  assert.equal(extension.supportsInputRequired,true);
+  assert.equal(extension.inputRequiredMode,'user-mediated-form-elicitation');
+  assert.equal(extension.maxInputRequiredRounds,10);
+  assert.equal(extension.requestStatePolicy,'opaque-byte-exact-echo');
+  assert.equal(extension.inputResponsesPolicy,'current-round-only');
+  assert.equal(extension.continuationSha256PreviewBinding,true);
+  assert.equal(extension.explicitContinuationApproval,true);
+  assert.equal(extension.automaticInputFulfillment,false);
 });
