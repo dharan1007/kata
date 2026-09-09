@@ -41,10 +41,28 @@
       </div>
     </section>
     <section class="mcp-probe">
+      <h2>MCP endpoint</h2>
       <label for="mcp-endpoint">MCP endpoint on this site</label>
       <input id="mcp-endpoint" value="/mcp" autocomplete="off" spellcheck="false">
       <button id="inspect-mcp" type="button">Inspect MCP endpoint</button>
-      <p class="muted">Same-origin HTTPS only, except loopback HTTP for local development. Discovery never sends cookies or tokens and never calls tools.</p>
+      <p class="muted">Same-origin HTTPS only, except loopback HTTP for local development. Discovery never sends cookies or tokens. Public modern MCP tools can be listed and invoked only after a fresh exact preview and explicit approval.</p>
+      <div id="mcp-result" hidden>
+        <h3>MCP discovery</h3>
+        <div id="mcp-summary"></div>
+      </div>
+      <div id="mcp-tools" hidden>
+        <button id="list-mcp-tools" type="button">List public modern MCP tools</button>
+        <div id="mcp-tools-summary"></div>
+        <label for="mcp-tool">Tool</label>
+        <select id="mcp-tool"></select>
+        <label for="mcp-arguments">Arguments (JSON)</label>
+        <textarea id="mcp-arguments" rows="6" spellcheck="false">{}</textarea>
+        <button id="preview-mcp-tool" type="button" disabled>Preview exact MCP call</button>
+        <div id="mcp-preview" hidden></div>
+        <label id="mcp-approval-label" class="approval" hidden><input id="mcp-execution-approval" type="checkbox"> I approve this MCP tool call exactly as previewed.</label>
+        <button id="execute-mcp-tool" type="button" disabled>Execute previewed MCP call</button>
+        <div id="mcp-execution" hidden></div>
+      </div>
     </section>
     <p id="status" role="status" aria-live="polite"></p>
     <section id="result" hidden>
@@ -54,10 +72,6 @@
       <div id="diagnosis"></div>
       <h2>Restrictions and setup</h2>
       <ul id="blockers"></ul>
-    </section>
-    <section id="mcp-result" hidden>
-      <h2>MCP discovery</h2>
-      <div id="mcp-summary"></div>
     </section>
   </main>
   <script type="module" src="popup.js"></script>
