@@ -25,6 +25,7 @@ export function createMemoryCommercialStore(){
     async insertEnvironment(input){if(state.environments.some(x=>x.projectId===input.projectId&&x.name===input.name))throw Object.assign(new Error('ENVIRONMENT_NAME_EXISTS'),{code:'ENVIRONMENT_NAME_EXISTS'});const row={id:id('env'),...input,createdAt:new Date().toISOString()};state.environments.push(row);return row;},
     async insertApiKey(input){const row={id:id('key'),...input,createdAt:new Date().toISOString(),lastUsedAt:null,revokedAt:null};state.apiKeys.push(row);return row;},
     async getApiKeyByPrefix(prefix){return state.apiKeys.find(x=>x.prefix===prefix)??null;},
+    async getApiKeyById(keyId){return state.apiKeys.find(x=>x.id===keyId)??null;},
     async revokeApiKey(keyId,revokedAt){const row=state.apiKeys.find(x=>x.id===keyId);if(!row)return null;row.revokedAt=revokedAt;return row;},
     async touchApiKey(keyId,lastUsedAt){const row=state.apiKeys.find(x=>x.id===keyId);if(row)row.lastUsedAt=lastUsedAt;return row??null;},
     async listApiKeysForOrganization(organizationId){return state.apiKeys.filter(x=>x.organizationId===organizationId);},
