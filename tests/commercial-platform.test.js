@@ -22,3 +22,8 @@ test('identity adapter treats absent provider user as anonymous',async()=>{
   const adapter=createNetlifyIdentityAdapter({getUser:async()=>null});
   assert.equal(await adapter.getPrincipal(new Request('https://kata.example/api/account')),null);
 });
+
+test('identity adapter refuses a provider record without a stable subject',async()=>{
+  const adapter=createNetlifyIdentityAdapter({getUser:async()=>({email:'a@example.com'})});
+  await assert.rejects(()=>adapter.getPrincipal(new Request('https://kata.example/api/account')),error=>error.code==='IDENTITY_INVALID');
+});
