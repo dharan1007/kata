@@ -26,18 +26,41 @@ export function inspectBrowserRuntime(runtime={}){
   function isIframe(node){
     try{return String(node?.localName??node?.tagName??'').toLowerCase()==='iframe';}catch{return false;}
   }
+  function declaredApis(doc){
+    const out=[];
+    try{
+      for(const link of doc?.querySelectorAll?.('link[rel="service-desc"],link[type="application/openapi+json"],link[type="application/vnd.oai.openapi+json"]')??[]){
+        const href=link.href||link.getAttribute?.('href');if(href&&!out.includes(href))out.push(href);
+      }
+    }catch{}
+    return out;
+  }
+  function frameDocumentEvidence(doc,index){
+    const apis=declaredApis(doc);
+    let url=null;
+    try{url=doc?.URL??null;}catch{}
+    return{
+      index,
+      url,
+      webMcpApi:doc?.modelContext?.registerTool?'available':'unavailable',
+      toolsPermission:toolsPermission(doc),
+      declaredApiDescriptions:apis
+    };
+  }
   function domTopology(doc,maxInspectedNodes){
     let openShadowRoots=0,iframes=0,accessibleFrames=0,inaccessibleFrames=0,inspectedNodes=0,truncated=false;
-    const queue=[];
+    const queue=[],frameContexts=[];
     try{if(doc?.documentElement)queue.push(doc.documentElement);}catch{}
     for(let cursor=0;cursor<queue.length&&inspectedNodes<maxInspectedNodes;cursor++){
       const node=queue[cursor];inspectedNodes++;
       if(isIframe(node)){
         iframes++;
         try{
-          const root=node.contentDocument?.documentElement;
+          const frameDoc=node.contentDocument;
+          const root=frameDoc?.documentElement;
           if(root){
             accessibleFrames++;
+            frameContexts.push(frameDocumentEvidence(frameDoc,accessibleFrames));
             if(queue.length<maxInspectedNodes)queue.push(root);else truncated=true;
           }else inaccessibleFrames++;
         }catch{inaccessibleFrames++;}
@@ -56,16 +79,7 @@ export function inspectBrowserRuntime(runtime={}){
       }catch{}
     }
     if(queue.length>inspectedNodes)truncated=true;
-    return{openShadowRoots,iframes,accessibleFrames,inaccessibleFrames,inspectedNodes,maxInspectedNodes,truncated};
-  }
-  function declaredApis(doc){
-    const out=[];
-    try{
-      for(const link of doc?.querySelectorAll?.('link[rel="service-desc"],link[type="application/openapi+json"],link[type="application/vnd.oai.openapi+json"]')??[]){
-        const href=link.href||link.getAttribute?.('href');if(href&&!out.includes(href))out.push(href);
-      }
-    }catch{}
-    return out;
+    return{openShadowRoots,iframes,accessibleFrames,inaccessibleFrames,inspectedNodes,maxInspectedNodes,truncated,frameContexts};
   }
   function metaCsp(doc){
     try{return doc?.querySelector?.('meta[http-equiv="Content-Security-Policy" i]')?.content??null;}catch{return null;}
@@ -93,10 +107,11 @@ export function inspectBrowserRuntime(runtime={}){
     secureContext:typeof runtime.isSecureContext==='boolean'?runtime.isSecureContext:Boolean(globalThis.isSecureContext),
     frameworkHints:frameworkHints(win,doc),
     dom:topology,
+    frameContexts:topology.frameContexts,
     declaredApiDescriptions:apis,
     cspMetaPresent:Boolean(cspMeta),
     cspMeta,
-    notes:['A service-desc/OpenAPI link establishes that a machine-readable service description is declared; it does not establish CORS, authentication, policy, quota, reachability, or permission to call that API.','CORS, response-header CSP, authentication, bot protection, rate limits and service terms are intentionally not inferred by this probe.',topology.truncated?`DOM topology inspection stopped after ${topology.inspectedNodes} nodes at the configured safety bound; topology counts are partial evidence.`:'DOM topology inspection completed within the configured safety bound.']
+    notes:['A service-desc/OpenAPI link establishes that a machine-readable service description is declared; it does not establish CORS, authentication, policy, quota, reachability, or permission to call that API.','CORS, response-header CSP, authentication, bot protection, rate limits and service terms are intentionally not inferred by this probe.','Accessible same-origin iframe documents are inspected for their own WebMCP availability, tools Permissions Policy state and declared machine-readable APIs. Inaccessible/cross-origin frame contents remain opaque and are never bypassed.',topology.truncated?`DOM topology inspection stopped after ${topology.inspectedNodes} nodes at the configured safety bound; topology counts and frame-context evidence are partial.`:'DOM topology inspection completed within the configured safety bound.']
   };
   const evidence=[
     {key:'frame',value:environment.frame,source:'browser-runtime',confidence:1},
@@ -105,6 +120,7 @@ export function inspectBrowserRuntime(runtime={}){
     {key:'api',value:environment.api,source:apis.length?'service-description-declaration':'browser-runtime',confidence:apis.length?1:0.25},
     {key:'secureContext',value:observedRuntime.secureContext,source:'browser-runtime',confidence:1},
     {key:'declaredApiDescriptions',value:apis,source:'document-link-declarations',confidence:1},
+    {key:'accessibleFrameContexts',value:topology.frameContexts,source:'browser-runtime',confidence:topology.truncated?0.75:1},
     {key:'domTopologyCoverage',value:topology.truncated?'partial':'complete',source:'browser-runtime',confidence:1}
   ];
   return{environment,runtime:observedRuntime,evidence};
