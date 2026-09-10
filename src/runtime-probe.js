@@ -34,7 +34,13 @@ export function inspectBrowserRuntime(runtime={}){
       const node=queue[cursor];inspectedNodes++;
       if(isIframe(node)){
         iframes++;
-        try{const root=node.contentDocument?.documentElement;if(root)accessibleFrames++;else inaccessibleFrames++;}catch{inaccessibleFrames++;}
+        try{
+          const root=node.contentDocument?.documentElement;
+          if(root){
+            accessibleFrames++;
+            if(queue.length<maxInspectedNodes)queue.push(root);else truncated=true;
+          }else inaccessibleFrames++;
+        }catch{inaccessibleFrames++;}
       }
       try{
         if(node.shadowRoot){

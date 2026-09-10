@@ -121,3 +121,26 @@ test('runtime probe discovers iframe boundaries inside observable open shadow ro
   assert.equal(result.runtime.dom.inaccessibleFrames,0);
   assert.equal(result.runtime.dom.truncated,false);
 });
+
+test('runtime probe traverses accessible iframe documents under the same bounded topology budget',()=>{
+  const nestedShadowHost={localName:'nested-shell',children:[],shadowRoot:{children:[]}};
+  const nestedFrame={localName:'iframe',children:[],shadowRoot:null,get contentDocument(){throw new Error('cross origin')}};
+  const frameDocument={documentElement:{localName:'html',children:[nestedShadowHost,nestedFrame],shadowRoot:null}};
+  const frame={localName:'iframe',children:[],shadowRoot:null,contentDocument:frameDocument};
+  const document={
+    URL:'https://app.example.test/',
+    modelContext:{registerTool(){}},
+    permissionsPolicy:{allowsFeature(){return true;}},
+    documentElement:{localName:'html',children:[frame],shadowRoot:null},
+    querySelector(){return null;},
+    querySelectorAll(){return[];}
+  };
+  const window={location:{href:'https://app.example.test/',origin:'https://app.example.test'}};window.top=window;
+  const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true});
+  assert.equal(result.runtime.dom.iframes,2);
+  assert.equal(result.runtime.dom.accessibleFrames,1);
+  assert.equal(result.runtime.dom.inaccessibleFrames,1);
+  assert.equal(result.runtime.dom.openShadowRoots,1);
+  assert.equal(result.runtime.dom.truncated,false);
+  assert.equal(result.evidence.find(x=>x.key==='domTopologyCoverage').value,'complete');
+});
