@@ -17,6 +17,7 @@ export function createMemoryCommercialStore(){
     async listOrganizationsForUser(userId){return state.memberships.filter(x=>x.userId===userId).map(m=>({...state.organizations.find(o=>o.id===m.organizationId),role:m.role}));},
     async insertInvitation(input){const row={id:id('inv'),...input,acceptedAt:null,revokedAt:null,createdAt:new Date().toISOString()};state.invitations.push(row);return row;},
     async getInvitationByHashForUpdate(tokenHash){return state.invitations.find(x=>x.tokenHash===tokenHash)??null;},
+    async getInvitationById(invitationId){return state.invitations.find(x=>x.id===invitationId)??null;},
     async markInvitationAccepted(invitationId,{userId,acceptedAt}){const row=state.invitations.find(x=>x.id===invitationId);if(!row)return null;row.acceptedBy=userId;row.acceptedAt=acceptedAt;return row;},
     async markInvitationRevoked(invitationId,revokedAt){const row=state.invitations.find(x=>x.id===invitationId);if(!row)return null;row.revokedAt=revokedAt;return row;},
     async insertProject(input){if(state.projects.some(x=>x.organizationId===input.organizationId&&x.slug===input.slug))throw Object.assign(new Error('PROJECT_SLUG_EXISTS'),{code:'PROJECT_SLUG_EXISTS'});const row={id:id('prj'),...input,archivedAt:null,createdAt:new Date().toISOString()};state.projects.push(row);return row;},
