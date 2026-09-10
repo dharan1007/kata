@@ -49,3 +49,11 @@ test('documented API without server-side evidence remains unknown instead of bei
   assert.equal(graph.paths.server_api.status,'unknown');
   assert.equal(graph.paths.server_api.availability,'unknown');
 });
+
+test('a blocked browser API does not overstate impossibility while an eligible server API remains unknown',()=>{
+  const {serverSideApiAvailable,...withoutServerEvidence}=base;
+  const graph=buildInteropGraph({...withoutServerEvidence,webMcpApi:'unavailable',cors:'blocked',cspConnect:'blocked'},'call_api');
+  assert.equal(graph.paths.server_api.status,'unknown');
+  assert.equal(graph.paths.browser_api.status,'blocked');
+  assert.deepEqual(graph.decision,{status:'unknown',primaryPath:'server_api'});
+});
