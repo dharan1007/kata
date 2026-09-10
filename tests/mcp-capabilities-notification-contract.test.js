@@ -10,6 +10,6 @@ test('/api/capabilities distinguishes modern request routing headers from notifi
   assert.equal(r.statusCode,200);
   const contract=r.body.capabilities.mcp.modernRequest;
   assert.deepEqual(contract.requiredHeaders,['Content-Type','Accept','MCP-Protocol-Version','Mcp-Method']);
-  assert.deepEqual(contract.notificationRequiredHeaders,['Content-Type','Accept']);
+  assert.deepEqual(contract.notificationRequiredHeaders,['Content-Type','Accept','MCP-Protocol-Version']);
   assert.equal(contract.notificationRoutingHeadersRequired,false);
 });
