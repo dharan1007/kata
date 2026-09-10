@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMemoryCommercialStore} from './helpers/commercial-store.js';
 import {provisionAccount} from '../lib/commercial/identity.js';
-import {createOrganization,createInvitation,acceptInvitation,changeMemberRole,removeMember} from '../lib/commercial/organizations.js';
+import {createOrganization,createInvitation,acceptInvitation,revokeInvitation,changeMemberRole,removeMember} from '../lib/commercial/organizations.js';
 import {createProject,createEnvironment,validateTargetUrl} from '../lib/commercial/projects.js';
 
 const p=(subject,email=`${subject}@example.com`)=>({type:'user',authn:'identity-session',subject,email});
@@ -22,6 +22,17 @@ test('team invitations are one-time hash-only email-bound credentials',async()=>
   assert.equal(joined.membership.role,'MEMBER');
   await assert.rejects(()=>acceptInvitation({store,principal:p('member','member@example.com'),token:issued.token,pepper:'test-pepper'}),error=>error.code==='INVITATION_ALREADY_USED');
   assert.ok(owner.personalOrganization.id);
+});
+
+test('invitation revocation uses the provider-neutral store instead of in-memory arrays',async()=>{
+  const store=createMemoryCommercialStore();
+  await provisionAccount({store,principal:p('owner')});
+  const team=await createOrganization({store,actor:p('owner'),name:'Revocation Team'});
+  const issued=await createInvitation({store,actor:p('owner'),organizationId:team.id,email:'member@example.com',role:'MEMBER',expiresInSeconds:3600,pepper:'test-pepper'});
+  const invitationId=issued.invitation.id;
+  delete store.invitations;
+  const result=await revokeInvitation({store,actor:p('owner'),invitationId});
+  assert.equal(result.revokedAt==null,false);
 });
 
 test('membership changes cannot leave an organization without an OWNER',async()=>{
