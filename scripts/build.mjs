@@ -1,10 +1,28 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {createReleaseContract} from './release-contract.mjs';
 
+const execFileAsync=promisify(execFile);
 const root=path.resolve(new URL('..',import.meta.url).pathname);
 const out=path.join(root,'dist');
+
+async function inspectSource(){
+  try{
+    const head=await execFileAsync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});
+    const status=await execFileAsync('git',['status','--porcelain=v1','--untracked-files=all'],{cwd:root,encoding:'utf8'});
+    return {
+      sourceHeadSha:head.stdout.trim(),
+      sourceClean:status.stdout.trim().length===0
+    };
+  }catch{
+    return {sourceHeadSha:null,sourceClean:null};
+  }
+}
+
+const sourceEvidence=await inspectSource();
 await fs.rm(out,{recursive:true,force:true});
 await fs.mkdir(path.join(out,'src'),{recursive:true});
 
@@ -26,7 +44,7 @@ for(const rel of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-ex
 
 const integrityBytes=Buffer.from(JSON.stringify(integrity,null,2));
 const integritySha256=createHash('sha256').update(integrityBytes).digest('hex');
-const release=createReleaseContract(process.env,{integritySha256,integrityBytes:integrityBytes.length});
+const release=createReleaseContract(process.env,{...sourceEvidence,integritySha256,integrityBytes:integrityBytes.length});
 await fs.writeFile(path.join(out,'integrity.json'),integrityBytes);
 await fs.writeFile(path.join(out,'release.json'),JSON.stringify(release,null,2));
 console.log(`Built ${Object.keys(integrity.assets).length} canonical static assets with SHA-256 integrity manifest and release provenance contract (${release.source.provenance}, integrity-bound).`);
