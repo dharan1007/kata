@@ -7,7 +7,7 @@ const metadata = {
   'io.modelcontextprotocol/clientCapabilities': {}
 };
 
-test('MCP 2026-07-28 notifications require MCP-Protocol-Version on every POST', async () => {
+test('MCP 2026-07-28 notifications accept modern metadata without transport routing headers', async () => {
   let invoked = false;
   const registry = {
     list() { return []; },
@@ -23,13 +23,12 @@ test('MCP 2026-07-28 notifications require MCP-Protocol-Version on every POST', 
     }
   }, {registry});
 
-  assert.equal(response.status, 400);
-  assert.equal(response.body?.error?.code, -32020);
-  assert.match(response.body?.error?.message ?? '', /MCP-Protocol-Version header/i);
+  assert.equal(response.status, 202);
+  assert.equal(response.body, undefined);
   assert.equal(invoked, false);
 });
 
-test('MCP 2026-07-28 notifications require protocol metadata but not optional routing headers', async () => {
+test('MCP 2026-07-28 notifications still require protocol metadata', async () => {
   let invoked = false;
   const registry = {
     list() { return []; },
@@ -43,11 +42,14 @@ test('MCP 2026-07-28 notifications require protocol metadata but not optional ro
     body: {
       jsonrpc: '2.0',
       method: 'notifications/custom-event',
-      params: {_meta: metadata}
+      params: {_meta: {
+        'io.modelcontextprotocol/clientCapabilities': {}
+      }}
     }
   }, {registry});
 
-  assert.equal(response.status, 202);
-  assert.equal(response.body, undefined);
+  assert.equal(response.status, 400);
+  assert.equal(response.body?.error?.code, -32602);
+  assert.match(response.body?.error?.message ?? '', /protocol version metadata/i);
   assert.equal(invoked, false);
 });
