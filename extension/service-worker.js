@@ -8,6 +8,7 @@ export {executePageApiRequest};
 
 const KATA_BASE='https://kata-webmcp.vercel.app';
 const MCP_VERSION='2026-07-28';
+const MCP_SERVER_INFO_KEY='io.modelcontextprotocol/serverInfo';
 const INTENTS=new Set(['read','act','automate','expose_webmcp','call_api','connect_mcp']);
 
 function assertIntent(intent){if(!INTENTS.has(intent))throw new Error(`Unsupported interoperability intent: ${intent}`);}
@@ -17,6 +18,8 @@ function isLoopback(hostname){const h=String(hostname).toLowerCase();return h===
 function resolveMcpEndpoint(tab,endpoint){const page=assertInspectableTab(tab);const target=new URL(String(endpoint||'/mcp'),page.origin);if(target.origin!==page.origin)throw new Error('MCP inspection is restricted to a same-origin endpoint on the explicitly authorized tab.');if(target.protocol!=='https:'&&!(target.protocol==='http:'&&isLoopback(target.hostname)))throw new Error('Remote MCP inspection requires HTTPS; cleartext HTTP is allowed only for loopback development endpoints.');target.hash='';return target;}
 function localFailure(error,probe){return{ok:false,error:String(error?.message??error),runtime:probe?.runtime??null,evidence:probe?.evidence??[]};}
 function discoverBody(){return{jsonrpc:'2.0',id:'kata-mcp-discover',method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},'io.modelcontextprotocol/clientInfo':{name:'kata-interop-inspector',version:'3.0.0'}}}};}
+function validMcpServerInfo(value){if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.name!=='string'||!value.name.trim()||(value.version!==undefined&&typeof value.version!=='string'))return null;return{name:value.name,...(value.version!==undefined?{version:value.version}:{})};}
+function discoveredMcpServerInfo(result){const metadata=result?._meta;if(metadata&&typeof metadata==='object'&&!Array.isArray(metadata)&&Object.prototype.hasOwnProperty.call(metadata,MCP_SERVER_INFO_KEY))return validMcpServerInfo(metadata[MCP_SERVER_INFO_KEY]);return validMcpServerInfo(result?.serverInfo);}
 function resourceMetadataUrl(value){const match=String(value??'').match(/(?:^|[,\s])resource_metadata=(?:"([^"]+)"|([^,\s]+))/i);return match?.[1]??match?.[2]??null;}
 async function readProtectedResourceMetadata(response,target,fetchImpl){
   const raw=resourceMetadataUrl(response?.headers?.get?.('www-authenticate'));if(!raw)return{state:'unverified',metadata:null};
@@ -34,7 +37,7 @@ export async function inspectMcpEndpoint(tab,endpoint='/mcp',deps={}){
   let response;try{response=await fetchImpl(target.href,init);}catch(error){return{ok:false,error:`MCP discovery request failed: ${error?.message??error}`,environment:{mcpEndpoint:'unknown',mcpModernProtocol:'unknown',mcpAuth:'unknown',mcpAuthMetadata:'unknown'}};}
   if(response?.status===401){const authorization=await readProtectedResourceMetadata(response,target,fetchImpl);return{ok:true,endpoint:target.href,environment:{mcpEndpoint:'protected',mcpModernProtocol:'unknown',mcpAuth:'required',mcpAuthMetadata:authorization.state},authorization:authorization.metadata};}
   let payload=null;try{payload=await response?.json?.();}catch{}
-  if(response?.ok&&payload?.jsonrpc==='2.0'&&payload?.result&&Array.isArray(payload.result.supportedVersions)){const supported=payload.result.supportedVersions.includes(MCP_VERSION);return{ok:true,endpoint:target.href,environment:{mcpEndpoint:'available',mcpModernProtocol:supported?'supported':'unsupported',mcpAuth:'none',mcpAuthMetadata:'not-required'},server:{supportedVersions:payload.result.supportedVersions.slice(0,32),capabilities:payload.result.capabilities??{},serverInfo:payload.result.serverInfo??null,instructions:typeof payload.result.instructions==='string'?payload.result.instructions:null}};}
+  if(response?.ok&&payload?.jsonrpc==='2.0'&&payload?.result&&Array.isArray(payload.result.supportedVersions)){const supported=payload.result.supportedVersions.includes(MCP_VERSION);return{ok:true,endpoint:target.href,environment:{mcpEndpoint:'available',mcpModernProtocol:supported?'supported':'unsupported',mcpAuth:'none',mcpAuthMetadata:'not-required'},server:{supportedVersions:payload.result.supportedVersions.slice(0,32),capabilities:payload.result.capabilities??{},serverInfo:discoveredMcpServerInfo(payload.result),instructions:typeof payload.result.instructions==='string'?payload.result.instructions:null}};}
   if(payload?.error?.code===-32601)return{ok:true,endpoint:target.href,environment:{mcpEndpoint:'legacy-candidate',mcpModernProtocol:'unsupported',mcpAuth:'unknown',mcpAuthMetadata:'unknown'},server:null};
   return{ok:false,error:`MCP server/discover was not established (HTTP ${response?.status??'unknown'}).`,endpoint:target.href,environment:{mcpEndpoint:'unknown',mcpModernProtocol:'unknown',mcpAuth:'unknown',mcpAuthMetadata:'unknown'}};
 }
