@@ -23,15 +23,30 @@ function validSha256(value){
   return normalized&&SHA256_RE.test(normalized)?normalized.toLowerCase():null;
 }
 
-export function resolveSourceIdentity(env=process.env){
+function verificationFor(advertisedSha,evidence={}){
+  const clean=evidence.sourceClean===true?true:evidence.sourceClean===false?false:null;
+  const headSha=validSha(evidence.sourceHeadSha);
+  const headMatches=headSha?headSha===advertisedSha:null;
+  return {clean,headSha,headMatches};
+}
+
+function providerProvenance(verification){
+  if(verification.clean===false)return 'dirty';
+  if(verification.clean===true&&verification.headMatches===true)return 'source-bound';
+  return 'unverified';
+}
+
+export function resolveSourceIdentity(env=process.env,evidence={}){
   const githubSha=validSha(env.GITHUB_SHA);
   if(githubSha){
+    const verification=verificationFor(githubSha,evidence);
     return {
       sha:githubSha,
-      provenance:'source-bound',
+      provenance:providerProvenance(verification),
       authority:'github-actions',
       repository:env.GITHUB_REPOSITORY?.trim()||null,
-      ref:env.GITHUB_REF?.trim()||null
+      ref:env.GITHUB_REF?.trim()||null,
+      verification
     };
   }
 
@@ -39,12 +54,14 @@ export function resolveSourceIdentity(env=process.env){
   if(vercelSha){
     const owner=env.VERCEL_GIT_REPO_OWNER?.trim();
     const slug=env.VERCEL_GIT_REPO_SLUG?.trim();
+    const verification=verificationFor(vercelSha,evidence);
     return {
       sha:vercelSha,
-      provenance:'source-bound',
+      provenance:providerProvenance(verification),
       authority:'vercel-git',
       repository:owner&&slug?`${owner}/${slug}`:null,
-      ref:env.VERCEL_GIT_COMMIT_REF?.trim()||null
+      ref:env.VERCEL_GIT_COMMIT_REF?.trim()||null,
+      verification
     };
   }
 
@@ -55,7 +72,8 @@ export function resolveSourceIdentity(env=process.env){
       provenance:'asserted',
       authority:'explicit',
       repository:env.GITHUB_REPOSITORY?.trim()||null,
-      ref:env.GITHUB_REF?.trim()||env.VERCEL_GIT_COMMIT_REF?.trim()||null
+      ref:env.GITHUB_REF?.trim()||env.VERCEL_GIT_COMMIT_REF?.trim()||null,
+      verification:verificationFor(explicitSha,evidence)
     };
   }
 
@@ -64,7 +82,8 @@ export function resolveSourceIdentity(env=process.env){
     provenance:'unverified',
     authority:'none',
     repository:null,
-    ref:null
+    ref:null,
+    verification:{clean:null,headSha:null,headMatches:null}
   };
 }
 
@@ -73,7 +92,7 @@ export function resolveSourceSha(env=process.env){
 }
 
 export function createReleaseContract(env=process.env,evidence={}){
-  const source=resolveSourceIdentity(env);
+  const source=resolveSourceIdentity(env,evidence);
   const integritySha256=validSha256(evidence.integritySha256);
   const integrityBytes=Number.isSafeInteger(evidence.integrityBytes)&&evidence.integrityBytes>0?evidence.integrityBytes:null;
   return {

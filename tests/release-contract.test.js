@@ -2,23 +2,64 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createReleaseContract,resolveSourceSha,REQUIRED_DEPLOYMENT_ROUTES} from '../scripts/release-contract.mjs';
 
-test('release contract binds to GitHub Actions source identity when available',()=>{
-  const sha='A'.repeat(40);
-  const contract=createReleaseContract({GITHUB_SHA:sha,GITHUB_REPOSITORY:'dharan1007/kata',GITHUB_REF:'refs/heads/main'});
-  assert.equal(contract.source.sha,sha.toLowerCase());
+const SHA_A='A'.repeat(40);
+const SHA_B='B'.repeat(40);
+
+function cleanEvidence(sha){
+  return {sourceClean:true,sourceHeadSha:sha};
+}
+
+test('release contract binds to GitHub Actions source identity only when the checkout is clean and exact',()=>{
+  const contract=createReleaseContract({GITHUB_SHA:SHA_A,GITHUB_REPOSITORY:'dharan1007/kata',GITHUB_REF:'refs/heads/main'},cleanEvidence(SHA_A));
+  assert.equal(contract.source.sha,SHA_A.toLowerCase());
   assert.equal(contract.source.provenance,'source-bound');
   assert.equal(contract.source.authority,'github-actions');
   assert.equal(contract.source.repository,'dharan1007/kata');
   assert.equal(contract.source.ref,'refs/heads/main');
+  assert.equal(contract.source.verification.clean,true);
+  assert.equal(contract.source.verification.headMatches,true);
 });
 
-test('release contract binds to Vercel Git identity when Git integration supplies the commit',()=>{
-  const sha='B'.repeat(40);
-  const contract=createReleaseContract({VERCEL_GIT_COMMIT_SHA:sha,VERCEL_GIT_REPO_SLUG:'kata',VERCEL_GIT_REPO_OWNER:'dharan1007',VERCEL_GIT_COMMIT_REF:'main'});
-  assert.equal(contract.source.sha,sha.toLowerCase());
+test('release contract binds to Vercel Git identity only when the checkout is clean and exact',()=>{
+  const contract=createReleaseContract({VERCEL_GIT_COMMIT_SHA:SHA_B,VERCEL_GIT_REPO_SLUG:'kata',VERCEL_GIT_REPO_OWNER:'dharan1007',VERCEL_GIT_COMMIT_REF:'main'},cleanEvidence(SHA_B));
+  assert.equal(contract.source.sha,SHA_B.toLowerCase());
   assert.equal(contract.source.provenance,'source-bound');
   assert.equal(contract.source.authority,'vercel-git');
   assert.equal(contract.source.ref,'main');
+  assert.equal(contract.source.verification.clean,true);
+  assert.equal(contract.source.verification.headMatches,true);
+});
+
+test('dirty GitHub Actions source is never described as source-bound',()=>{
+  const contract=createReleaseContract({GITHUB_SHA:SHA_A},{sourceClean:false,sourceHeadSha:SHA_A});
+  assert.equal(contract.source.sha,SHA_A.toLowerCase());
+  assert.equal(contract.source.provenance,'dirty');
+  assert.equal(contract.source.verification.clean,false);
+  assert.equal(contract.source.verification.headMatches,true);
+});
+
+test('dirty Vercel Git source is never described as source-bound',()=>{
+  const contract=createReleaseContract({VERCEL_GIT_COMMIT_SHA:SHA_A},{sourceClean:false,sourceHeadSha:SHA_A});
+  assert.equal(contract.source.sha,SHA_A.toLowerCase());
+  assert.equal(contract.source.provenance,'dirty');
+  assert.equal(contract.source.verification.clean,false);
+});
+
+test('provider source identity is unverified when Git cleanliness cannot be determined',()=>{
+  const contract=createReleaseContract({GITHUB_SHA:SHA_A},{sourceClean:null,sourceHeadSha:null});
+  assert.equal(contract.source.sha,SHA_A.toLowerCase());
+  assert.equal(contract.source.provenance,'unverified');
+  assert.equal(contract.source.authority,'github-actions');
+  assert.equal(contract.source.verification.clean,null);
+  assert.equal(contract.source.verification.headMatches,null);
+});
+
+test('provider source identity is unverified when advertised SHA does not match checked out HEAD',()=>{
+  const contract=createReleaseContract({GITHUB_SHA:SHA_A},cleanEvidence(SHA_B));
+  assert.equal(contract.source.sha,SHA_A.toLowerCase());
+  assert.equal(contract.source.provenance,'unverified');
+  assert.equal(contract.source.verification.clean,true);
+  assert.equal(contract.source.verification.headMatches,false);
 });
 
 test('manual KATA_SOURCE_SHA is explicit provenance, not provider-bound provenance',()=>{
@@ -29,10 +70,10 @@ test('manual KATA_SOURCE_SHA is explicit provenance, not provider-bound provenan
   assert.equal(contract.source.authority,'explicit');
 });
 
-test('provider source identity outranks a conflicting manual source assertion',()=>{
+test('provider source identity outranks a conflicting manual source assertion without overstating proof',()=>{
   const githubSha='D'.repeat(40);
   const assertedSha='E'.repeat(40);
-  const contract=createReleaseContract({GITHUB_SHA:githubSha,KATA_SOURCE_SHA:assertedSha});
+  const contract=createReleaseContract({GITHUB_SHA:githubSha,KATA_SOURCE_SHA:assertedSha},cleanEvidence(githubSha));
   assert.equal(contract.source.sha,githubSha.toLowerCase());
   assert.equal(contract.source.provenance,'source-bound');
   assert.equal(contract.source.authority,'github-actions');
@@ -62,7 +103,7 @@ test('release contract requires the deployed provenance and integrity evidence e
 
 test('release contract cryptographically binds the integrity manifest evidence',()=>{
   const sha256='F'.repeat(64);
-  const contract=createReleaseContract({GITHUB_SHA:'A'.repeat(40)},{integritySha256:sha256,integrityBytes:4096});
+  const contract=createReleaseContract({GITHUB_SHA:SHA_A},{...cleanEvidence(SHA_A),integritySha256:sha256,integrityBytes:4096});
   assert.equal(contract.schemaVersion,2);
   assert.deepEqual(contract.evidence.integrity,{
     path:'/integrity.json',
