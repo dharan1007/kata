@@ -144,3 +144,34 @@ test('runtime probe traverses accessible iframe documents under the same bounded
   assert.equal(result.runtime.dom.truncated,false);
   assert.equal(result.evidence.find(x=>x.key==='domTopologyCoverage').value,'complete');
 });
+
+test('runtime probe reports WebMCP and permissions evidence for accessible iframe documents',()=>{
+  const frameApiLink={href:'https://app.example.test/frame-openapi.json',getAttribute:()=>'/frame-openapi.json'};
+  const frameDocument={
+    URL:'https://app.example.test/microfrontend',
+    modelContext:{registerTool(){}},
+    permissionsPolicy:{allowsFeature(name){return name==='tools'?false:true;}},
+    documentElement:{localName:'html',children:[],shadowRoot:null},
+    querySelectorAll(selector){return selector.includes('service-desc')?[frameApiLink]:[];}
+  };
+  const frame={localName:'iframe',children:[],shadowRoot:null,contentDocument:frameDocument};
+  const document={
+    URL:'https://app.example.test/',
+    permissionsPolicy:{allowsFeature(){return true;}},
+    documentElement:{localName:'html',children:[frame],shadowRoot:null},
+    querySelector(){return null;},
+    querySelectorAll(){return[];}
+  };
+  const window={location:{href:'https://app.example.test/',origin:'https://app.example.test'}};window.top=window;
+  const result=inspectBrowserRuntime({document,window,navigator:{},isSecureContext:true});
+  assert.equal(result.environment.webMcpApi,'unavailable');
+  assert.equal(result.runtime.frameContexts.length,1);
+  assert.deepEqual(result.runtime.frameContexts[0],{
+    index:1,
+    url:'https://app.example.test/microfrontend',
+    webMcpApi:'available',
+    toolsPermission:'blocked',
+    declaredApiDescriptions:['https://app.example.test/frame-openapi.json']
+  });
+  assert.deepEqual(result.evidence.find(x=>x.key==='accessibleFrameContexts').value,result.runtime.frameContexts);
+});
