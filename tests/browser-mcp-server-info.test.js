@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {inspectMcpEndpoint} from '../extension/service-worker.js';
+import {handleMcpRequest,MCP_VERSION} from '../lib/server/mcp.js';
 
 const tab={id:7,url:'https://example.com/app'};
 const SERVER_INFO_KEY='io.modelcontextprotocol/serverInfo';
@@ -46,4 +47,17 @@ test('legacy body-level serverInfo remains display-only fallback when modern met
   const fetchImpl=async()=>response(discoverResult({serverInfo:{name:'Transition Server',version:'1'}}));
   const discovered=await inspectMcpEndpoint(tab,'/mcp',{fetchImpl});
   assert.deepEqual(discovered.server.serverInfo,{name:'Transition Server',version:'1'});
+});
+
+test('KATA modern server discovery round-trips its result metadata identity through the browser inspector',async()=>{
+  const fetchImpl=async(_url,init)=>{
+    const body=JSON.parse(init.body);
+    const handled=await handleMcpRequest({headers:init.headers,body},{env:{}});
+    return {ok:handled.status>=200&&handled.status<300,status:handled.status,headers:{get(name){const target=String(name).toLowerCase();for(const [key,value] of Object.entries(handled.headers??{}))if(key.toLowerCase()===target)return value;return null;}},async json(){return handled.body;}};
+  };
+  const discovered=await inspectMcpEndpoint(tab,'/mcp',{fetchImpl});
+  assert.equal(discovered.ok,true);
+  assert.equal(discovered.environment.mcpModernProtocol,'supported');
+  assert.deepEqual(discovered.server.serverInfo,{name:'kata-webmcp',version:'3.0.0'});
+  assert.ok(discovered.server.supportedVersions.includes(MCP_VERSION));
 });
