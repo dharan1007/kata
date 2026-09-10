@@ -8,7 +8,7 @@ const out=path.join(root,'dist');
 await fs.rm(out,{recursive:true,force:true});
 await fs.mkdir(path.join(out,'src'),{recursive:true});
 
-const assets=['index.html','style.css','favicon.svg','robots.txt','src/main.js','src/app.js','src/webmcp.js','src/runtime-probe.js','src/api-discovery.js','src/api-adapter.js','src/api-execution.js','src/mcp-adapter.js','lib/shared/tool-contracts.js','lib/shared/schema.js'];
+const assets=['index.html','style.css','favicon.svg','robots.txt','src/main.js','src/app.js','src/webmcp.js','src/runtime-probe.js','src/api-discovery.js','src/api-adapter.js','src/api-execution.js','src/mcp-adapter.js','lib/shared/tool-contracts.js','lib/shared/schema.js','lib/shared/mcp-trace-context.js'];
 const extensionAssets=['manifest.json','popup.html','popup.js','popup.css','README.md'];
 const integrity={version:'3.0.0',generatedAt:new Date().toISOString(),assets:{}};
 async function emit(rel,bytes){
