@@ -449,7 +449,7 @@ Canonical CLI outcome classes:
 5  KATA/provider transient failure
 ```
 
-CI must be able to compare the current evaluation with an approved baseline and enforce organization policy.
+CI must be able to compare the current evaluation with the previous deployment.
 
 Example policy controls:
 
