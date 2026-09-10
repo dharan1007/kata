@@ -3,6 +3,7 @@ import {discoverBrowserApis} from '../src/api-discovery.js';
 import {compileOpenApiCandidates} from '../src/api-adapter.js';
 import {buildAuthorizedExecutionPreview,fingerprintExecutionPreview,executionRequestFromPreview,executePageApiRequest} from '../src/api-execution.js';
 import {listModernMcpTools,buildMcpToolCallPreview,buildMcpInputRequiredResumePreview,fingerprintMcpToolCallPreview,executeModernMcpToolCall,executeModernMcpToolResume,getModernMcpTask,buildMcpTaskUpdatePreview,executeModernMcpTaskUpdate,buildMcpTaskCancelPreview,executeModernMcpTaskCancel} from '../src/mcp-adapter.js';
+import {normalizeMcpTraceContext} from '../lib/shared/mcp-trace-context.js';
 
 export {executePageApiRequest};
 
@@ -17,7 +18,7 @@ function assertInspectableTab(tab){const url=tabUrl(tab);if(url.protocol!=='http
 function isLoopback(hostname){const h=String(hostname).toLowerCase();return h==='localhost'||h==='::1'||h==='[::1]'||h==='127.0.0.1'||h.startsWith('127.');}
 function resolveMcpEndpoint(tab,endpoint){const page=assertInspectableTab(tab);const target=new URL(String(endpoint||'/mcp'),page.origin);if(target.origin!==page.origin)throw new Error('MCP inspection is restricted to a same-origin endpoint on the explicitly authorized tab.');if(target.protocol!=='https:'&&!(target.protocol==='http:'&&isLoopback(target.hostname)))throw new Error('Remote MCP inspection requires HTTPS; cleartext HTTP is allowed only for loopback development endpoints.');target.hash='';return target;}
 function localFailure(error,probe){return{ok:false,error:String(error?.message??error),runtime:probe?.runtime??null,evidence:probe?.evidence??[]};}
-function discoverBody(){return{jsonrpc:'2.0',id:'kata-mcp-discover',method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},'io.modelcontextprotocol/clientInfo':{name:'kata-interop-inspector',version:'3.0.0'}}}};}
+function discoverBody(traceContext=null){return{jsonrpc:'2.0',id:'kata-mcp-discover',method:'server/discover',params:{_meta:{'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},'io.modelcontextprotocol/clientInfo':{name:'kata-interop-inspector',version:'3.0.0'},...(traceContext??{})}}};}
 function validMcpServerInfo(value){if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.name!=='string'||!value.name.trim()||(value.version!==undefined&&typeof value.version!=='string'))return null;return{name:value.name,...(value.version!==undefined?{version:value.version}:{})};}
 function discoveredMcpServerInfo(result){const metadata=result?._meta;if(metadata&&typeof metadata==='object'&&!Array.isArray(metadata)&&Object.prototype.hasOwnProperty.call(metadata,MCP_SERVER_INFO_KEY))return validMcpServerInfo(metadata[MCP_SERVER_INFO_KEY]);return validMcpServerInfo(result?.serverInfo);}
 function resourceMetadataUrl(value){const match=String(value??'').match(/(?:^|[,\s])resource_metadata=(?:"([^"]+)"|([^,\s]+))/i);return match?.[1]??match?.[2]??null;}
@@ -32,8 +33,9 @@ async function readProtectedResourceMetadata(response,target,fetchImpl){
 }
 
 export async function inspectMcpEndpoint(tab,endpoint='/mcp',deps={}){
+  const traceContext=normalizeMcpTraceContext(deps.traceContext);
   const fetchImpl=deps.fetchImpl??globalThis.fetch;if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');const target=resolveMcpEndpoint(tab,endpoint);
-  const init={method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream','MCP-Protocol-Version':MCP_VERSION,'Mcp-Method':'server/discover'},body:JSON.stringify(discoverBody()),credentials:'omit',cache:'no-store',redirect:'manual'};
+  const init={method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream','MCP-Protocol-Version':MCP_VERSION,'Mcp-Method':'server/discover'},body:JSON.stringify(discoverBody(traceContext)),credentials:'omit',cache:'no-store',redirect:'manual'};
   let response;try{response=await fetchImpl(target.href,init);}catch(error){return{ok:false,error:`MCP discovery request failed: ${error?.message??error}`,environment:{mcpEndpoint:'unknown',mcpModernProtocol:'unknown',mcpAuth:'unknown',mcpAuthMetadata:'unknown'}};}
   if(response?.status===401){const authorization=await readProtectedResourceMetadata(response,target,fetchImpl);return{ok:true,endpoint:target.href,environment:{mcpEndpoint:'protected',mcpModernProtocol:'unknown',mcpAuth:'required',mcpAuthMetadata:authorization.state},authorization:authorization.metadata};}
   let payload=null;try{payload=await response?.json?.();}catch{}

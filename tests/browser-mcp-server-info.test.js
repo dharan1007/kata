@@ -61,3 +61,30 @@ test('KATA modern server discovery round-trips its result metadata identity thro
   assert.deepEqual(discovered.server.serverInfo,{name:'kata-webmcp',version:'3.0.0'});
   assert.ok(discovered.server.supportedVersions.includes(MCP_VERSION));
 });
+
+test('MCP 2026 active-tab discovery propagates explicitly supplied W3C trace context in request _meta',async()=>{
+  const traceContext={
+    traceparent:'00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01',
+    tracestate:'vendor=opaque',
+    baggage:'tenant=diagnostic'
+  };
+  let body=null;
+  const fetchImpl=async(_url,init)=>{body=JSON.parse(init.body);return response(discoverResult());};
+  const discovered=await inspectMcpEndpoint(tab,'/mcp',{fetchImpl,traceContext});
+  assert.equal(discovered.ok,true);
+  assert.deepEqual({
+    traceparent:body.params._meta.traceparent,
+    tracestate:body.params._meta.tracestate,
+    baggage:body.params._meta.baggage
+  },traceContext);
+});
+
+test('MCP 2026 active-tab discovery rejects invalid trace context before fetch',async()=>{
+  let fetchCalls=0;
+  const fetchImpl=async()=>{fetchCalls+=1;return response(discoverResult());};
+  await assert.rejects(
+    inspectMcpEndpoint(tab,'/mcp',{fetchImpl,traceContext:{traceparent:'00-00000000000000000000000000000000-00f067aa0ba902b7-01'}}),
+    /traceparent/i
+  );
+  assert.equal(fetchCalls,0);
+});
