@@ -1,6 +1,6 @@
 # KATA Legal, Privacy, Support, Status and Enterprise Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the non-billing commercial trust layer required to sell KATA responsibly: legal/config gates, privacy lifecycle, support intake, status/readiness, audit export, retention controls and enterprise-ready governance foundations without claiming certifications or SLAs that do not exist.
 
