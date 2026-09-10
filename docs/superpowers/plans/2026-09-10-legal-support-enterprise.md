@@ -1,10 +1,10 @@
 # KATA Legal, Privacy, Support, Status and Enterprise Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]]`) syntax for tracking.
 
 **Goal:** Add the non-billing commercial trust layer required to sell KATA responsibly: legal/config gates, privacy lifecycle, support intake, status/readiness, audit export, retention controls and enterprise-ready governance foundations without claiming certifications or SLAs that do not exist.
 
-**Architecture:** Legal documents are versioned templates whose production activation requires real operator-owned identity/contact configuration. Privacy/support/audit flows use tenant-scoped server services and append-only evidence; public status derives from health/readiness signals instead of hard-coded marketing state.
+**Architecture:** Legal documents are versioned templates whose production activation requires real operator-owned identity/contact configuration. Privacy/support/audit flows use tenant-scoped server services and append-only evidence; public status derives from health/readiness signals instead of hard-coded marketing state. Internal support mutations use a separate server-configured operator principal and are never inferred from customer tenant roles or mutable Identity metadata.
 
 **Tech Stack:** Node.js 24 ESM, PostgreSQL, existing commercial router, static HTML/ESM views, `node:test`.
 
@@ -16,6 +16,7 @@
 - Checkout remains blocked until mandatory legal/merchant/privacy/support configuration is present.
 - Customer data is not sold and private project data is not used for model training without a future explicit opt-in design.
 - Audit/support logs exclude raw API keys, payment secrets and browser credentials.
+- Customer OWNER/ADMIN roles never imply KATA platform-support/operator authority.
 - No SOC 2, SAML/SCIM, data-residency, CMK or uptime-SLA claim until actually implemented/contracted.
 - Tenant deletion/export cannot cross organization boundaries.
 
@@ -30,7 +31,8 @@
 - `legal/subprocessors.template.md`
 - `lib/commercial/legal.js` — document registry/configuration/acceptance logic.
 - `lib/commercial/privacy.js` — export/deletion orchestration.
-- `lib/commercial/support.js` — support ticket intake/severity/state.
+- `lib/commercial/support.js` — customer support ticket intake/severity/state.
+- `lib/commercial/operator-auth.js` — server-configured internal support/operator principal verifier.
 - `lib/commercial/audit.js` — append/query/export helpers.
 - `lib/commercial/status.js` — component status projection.
 - `lib/commercial/retention.js` — bounded retention policy representation and pruning candidates.
@@ -38,6 +40,7 @@
 - `tests/commercial-legal.test.js`
 - `tests/commercial-privacy.test.js`
 - `tests/commercial-support.test.js`
+- `tests/commercial-operator-auth.test.js`
 - `tests/commercial-audit.test.js`
 - `tests/commercial-status.test.js`
 
@@ -147,38 +150,45 @@ git add lib/commercial/audit.js tests/commercial-audit.test.js
 git commit -m "feat: add redacted tenant audit ledger"
 ```
 
-### Task 4: Implement private support workflow and truthful response objectives
+### Task 4: Implement private support workflow and separate operator authority
 
 **Files:**
 - Create: `lib/commercial/support.js`
+- Create: `lib/commercial/operator-auth.js`
 - Create: `tests/commercial-support.test.js`
+- Create: `tests/commercial-operator-auth.test.js`
 
 **Interfaces:**
 - `createSupportTicket({store,actor,organizationId,projectId?,runId?,subject,description,severity})`.
-- `listSupportTickets(...)` tenant-scoped.
-- `updateSupportTicket(...)` only authorized support/admin path.
-- Plan support policy returns `community|private|priority|contract` and explicitly labels non-contract response times as objectives.
+- `listSupportTickets(...)` tenant-scoped for customer users.
+- `createOperatorAuth({allowedSubjects})` returns `verify(principal)` for internal support actions.
+- `updateSupportTicket({store,operator,ticketId,status,severity?,note?})` requires a verified platform operator, not customer OWNER/ADMIN.
+- Plan support policy returns `community|private|priority|contract` and labels non-contract response times as objectives.
 
-- [ ] **Step 1: Write RED tests**
+- [ ] **Step 1: Write RED customer-support tests**
 
-Prove Free cannot use private ticket API, Developer can create a private ticket, Team gets priority classification, users cannot self-label routine questions as SEV1 without meeting server validation rules, secrets are redacted, and cross-tenant ticket references are rejected.
+Prove Free cannot use private ticket API, Developer can create a private ticket, Team gets priority classification, users cannot self-label routine questions as SEV1 without server validation, secrets are redacted, and cross-tenant ticket references are rejected.
 
-- [ ] **Step 2: Confirm RED**
+- [ ] **Step 2: Write RED operator-auth tests**
 
-Run: `node --test tests/commercial-support.test.js`
+Assert a customer OWNER and an Identity user with mutable metadata `{operator:true}` cannot update ticket state. Only a verified server allowlisted Identity subject or dedicated future operator principal may perform an internal support mutation. Missing operator configuration leaves mutation unavailable rather than default-open.
+
+- [ ] **Step 3: Confirm RED**
+
+Run: `node --test tests/commercial-support.test.js tests/commercial-operator-auth.test.js`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement support service**
+- [ ] **Step 4: Implement support and operator services**
 
-SEV1 requires one of the finite server-recognized categories: service-wide paid outage, suspected cross-tenant/security exposure, or broad billing authorization fault. Other tickets are normalized downward unless support staff escalates.
+SEV1 requires one of the finite recognized categories: service-wide paid outage, suspected cross-tenant/security exposure, or broad billing-authorization fault. Internal operator identity is compared to a parsed exact subject allowlist configured server-side; no email suffix, user metadata or tenant role is sufficient. Every operator mutation appends an audit event containing operator subject, ticket, action and request ID but no secrets.
 
-- [ ] **Step 4: Run and commit**
+- [ ] **Step 5: Run and commit**
 
 ```bash
-node --test tests/commercial-support.test.js
-git add lib/commercial/support.js tests/commercial-support.test.js
-git commit -m "feat: add private commercial support workflow"
+node --test tests/commercial-support.test.js tests/commercial-operator-auth.test.js
+git add lib/commercial/support.js lib/commercial/operator-auth.js tests/commercial-support.test.js tests/commercial-operator-auth.test.js
+git commit -m "feat: add private support and operator authority"
 ```
 
 ### Task 5: Implement privacy export/delete orchestration
@@ -208,7 +218,7 @@ Expected: FAIL.
 
 Export JSON includes document version, generatedAt, identity/profile fields, memberships, owned project metadata, report metadata, legal acceptances and support/audit entries the user is entitled to see. Do not export other members' private profile data unnecessarily.
 
-Deletion requires an exact confirmation phrase generated for the current account and a fresh authenticated session signal supplied by the identity adapter.
+Deletion requires an exact confirmation phrase generated for the current account and a fresh authenticated-session signal supplied by the identity adapter.
 
 - [ ] **Step 4: Run and commit**
 
@@ -248,12 +258,12 @@ Each component state derives from a current check timestamp and finite state `op
 
 - [ ] **Step 4: Expose status/support/legal/privacy routes**
 
-Add management/public routes for legal document display/acceptance, support, account export/delete and public status with the authorization rules from earlier tasks.
+Add management/public routes for legal document display/acceptance, customer support, account export/delete and public status with the authorization rules from earlier tasks. Internal operator mutation routes require the separate operator verifier from Task 4.
 
 - [ ] **Step 5: Run complete plan gate**
 
 ```bash
-node --test tests/commercial-legal.test.js tests/commercial-privacy.test.js tests/commercial-support.test.js tests/commercial-audit.test.js tests/commercial-status.test.js
+node --test tests/commercial-legal.test.js tests/commercial-privacy.test.js tests/commercial-support.test.js tests/commercial-operator-auth.test.js tests/commercial-audit.test.js tests/commercial-status.test.js
 npm run check
 ```
 
@@ -289,7 +299,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Write enterprise/self-hosting docs**
 
-Self-hosting documents required environment-variable classes and interfaces without publishing real secrets. Explain that customer-funded deployment is the path for contractual infrastructure/SLA needs during bootstrap.
+Document required environment-variable classes and interfaces without publishing real secrets. Explain that customer-funded deployment is the path for contractual infrastructure/SLA needs during bootstrap.
 
 - [ ] **Step 4: Run final gate and commit**
 
@@ -302,4 +312,4 @@ git commit -m "docs: publish enterprise and self hosting boundaries"
 
 ## Plan F Completion Gate
 
-Plan F is complete only when live checkout cannot activate with incomplete legal configuration, legal acceptance is versioned, privacy export/delete is tenant-safe and idempotent, support has explicit truthful tiers, audit metadata is secret-redacted, status is evidence-derived rather than hard-coded, enterprise documentation makes no unsupported certification/SLA claim, and the full KATA release gate remains green.
+Plan F is complete only when live checkout cannot activate with incomplete legal configuration, legal acceptance is versioned, privacy export/delete is tenant-safe and idempotent, support has explicit truthful tiers, platform support authority is separate from customer tenant roles, audit metadata is secret-redacted, status is evidence-derived rather than hard-coded, enterprise documentation makes no unsupported certification/SLA claim, and the full KATA release gate remains green.
