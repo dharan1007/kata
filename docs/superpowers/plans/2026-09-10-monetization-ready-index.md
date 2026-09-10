@@ -90,7 +90,7 @@ A plan name, price, client-rendered feature flag, query parameter, request body 
 
 ### Internal support/operator authority
 
-Tenant roles are not platform-operator roles. Any future KATA support/operator mutation path must use a separately configured server-side operator principal/allowlist and generate an audit event. A customer OWNER/ADMIN does not automatically gain platform support authority, and mutable Identity metadata cannot create an operator. If no secure operator principal is configured, support-side mutation remains unavailable rather than falling back to tenant or client claims.
+Tenant roles are not platform-operator roles. KATA support/operator mutation paths use a separately configured server-side operator principal/allowlist and generate an audit event. A customer OWNER/ADMIN does not automatically gain platform support authority, and mutable Identity metadata cannot create an operator. If no secure operator principal is configured, support-side mutation remains unavailable rather than falling back to tenant or client claims.
 
 ### Billing authority
 
