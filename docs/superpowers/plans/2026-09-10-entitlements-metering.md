@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add one server-authoritative plan/entitlement system, scoped CI principals, and concurrency-safe usage reservation/outcome accounting.
+**Goal:** Add one server-authoritative plan/entitlement system, a public pricing contract, scoped CI principals, and concurrency-safe usage reservation/outcome accounting.
 
-**Architecture:** Plan names map once into immutable entitlement values; downstream code asks capability questions rather than branching on plan strings. Usage is reserved transactionally before execution and finalized afterward so retries and concurrent requests cannot overspend quota.
+**Architecture:** Plan IDs map once into immutable entitlements and public display metadata. Downstream code asks capability questions instead of branching on plan strings. Usage is reserved transactionally before execution and finalized afterward so retries and concurrent requests cannot overspend quota.
 
 **Tech Stack:** Node.js 24 ESM, PostgreSQL transactions/constraints, built-in crypto, `node:test`.
 
@@ -14,7 +14,8 @@
 
 - Commercial authorization remains server-side and tenant-first.
 - UI/browser metadata cannot grant plans, quotas, roles or scopes.
-- A BLOCKED compatibility diagnosis counts when KATA produced a legitimate assessment; KATA internal failures do not consume quota.
+- Public pricing metadata may describe plans but can never authorize a feature.
+- A valid BLOCKED compatibility diagnosis consumes an evaluation because KATA delivered the diagnosis; KATA internal failure does not.
 - Idempotent retries cannot consume quota twice.
 - Existing KATA protocol semantics remain unchanged.
 - Every task ends with targeted tests; the plan ends with `npm run check`.
@@ -23,24 +24,28 @@
 
 ## File Structure
 
-- `lib/commercial/plans.js` — canonical Free/Developer/Team/Enterprise entitlement registry.
-- `lib/commercial/entitlements.js` — subscription state to effective entitlement snapshot.
+- `lib/commercial/plans.js` — canonical plan IDs, public pricing metadata and immutable entitlement registry.
+- `lib/commercial/entitlements.js` — billing state to effective entitlement snapshot.
 - `lib/commercial/usage.js` — reserve/finalize/release usage workflow.
 - `lib/commercial/ci-tokens.js` — least-privilege project/environment CI credentials.
-- `netlify/database/migrations/002_entitlements_usage.sql` — subscription snapshot, quota bucket, reservation and usage tables.
+- `netlify/database/migrations/002_entitlements_usage.sql` — subscription snapshot, quota bucket, reservation, usage and CI-token tables.
 - `tests/commercial-entitlements.test.js`
+- `tests/commercial-usage-schema.test.js`
 - `tests/commercial-usage.test.js`
 - `tests/commercial-ci-tokens.test.js`
+- `tests/commercial-entitlement-api.test.js`
 
-### Task 1: Define one canonical plan registry
+### Task 1: Define one canonical plan and pricing registry
 
 **Files:**
 - Create: `lib/commercial/plans.js`
+- Create: `lib/commercial/entitlements.js`
 - Create: `tests/commercial-entitlements.test.js`
 
 **Interfaces:**
 - `PLAN_IDS = ['free','developer','team','enterprise']`.
-- `getPlanEntitlements(planId)` returns a frozen plain object.
+- `getPlanEntitlements(planId)` returns a frozen authorization object.
+- `getPublicPlans()` returns display-safe price/features only.
 - `deriveEffectiveEntitlements({billingState,planId,enterpriseOverrides})` returns server-authoritative capabilities.
 
 - [ ] **Step 1: Write RED tests for exact bootstrap plans**
@@ -54,10 +59,12 @@ assert.deepEqual(getPlanEntitlements('free'),{
 });
 assert.equal(getPlanEntitlements('developer').monthlyEvaluations,500);
 assert.equal(getPlanEntitlements('team').organizationMembers,10);
+assert.equal(getPublicPlans().find(p=>p.id==='developer').priceInrMonthly,999);
+assert.equal(getPublicPlans().find(p=>p.id==='team').priceInrMonthly,4999);
 assert.throws(()=>getPlanEntitlements('made-up'),/UNKNOWN_PLAN/);
 ```
 
-Also prove returned objects are frozen and caller mutation cannot change future authorization.
+Also prove returned objects are frozen, public pricing output contains no provider plan IDs/secrets, and caller mutation cannot change future authorization.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -65,16 +72,16 @@ Run: `node --test tests/commercial-entitlements.test.js`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement registry and canonical billing-state mapping**
+- [ ] **Step 3: Implement plan registry and billing-state mapping**
 
-Only `ACTIVE` paid subscriptions grant Developer/Team paid capabilities. `PAST_DUE`, `HALTED`, `CANCELLED`, `EXPIRED`, `RECONCILIATION_REQUIRED` default to an explicit restricted/free policy defined in this module; do not let the browser choose fallback behavior.
+Only server-reconciled `ACTIVE` Developer/Team subscriptions grant those paid entitlements. `PAST_DUE`, `HALTED`, `CANCELLED`, `EXPIRED` and `RECONCILIATION_REQUIRED` map through one documented restricted/free rule; the browser cannot choose fallback behavior. Enterprise overrides are accepted only from a server-side contract record, never request JSON.
 
 - [ ] **Step 4: Run tests and commit**
 
 ```bash
 node --test tests/commercial-entitlements.test.js
 git add lib/commercial/plans.js lib/commercial/entitlements.js tests/commercial-entitlements.test.js
-git commit -m "feat: add canonical commercial entitlements"
+git commit -m "feat: add canonical plans and entitlements"
 ```
 
 ### Task 2: Add entitlement and usage database state
@@ -84,16 +91,16 @@ git commit -m "feat: add canonical commercial entitlements"
 - Create: `tests/commercial-usage-schema.test.js`
 
 **Interfaces:**
-- `subscription_accounts` stores canonical billing state + plan ID.
-- `entitlement_snapshots` stores derived evidence/version, never client-authored values.
-- `usage_buckets` has unique `(organization_id,metric,window_start)`.
-- `usage_reservations` has unique `(organization_id,metric,idempotency_key)`.
+- `subscription_accounts` stores canonical billing state and plan ID.
+- `entitlement_snapshots` stores derived evidence/version, never client-authored capability values.
+- `usage_buckets` unique `(organization_id,metric,window_start)`.
+- `usage_reservations` unique `(organization_id,metric,idempotency_key)`.
 - `usage_events` references one reservation and records terminal outcome.
 - `ci_tokens` are project/environment scoped and store only key hash/prefix metadata.
 
-- [ ] **Step 1: Write migration contract tests**
+- [ ] **Step 1: Write RED migration tests**
 
-Assert the unique constraints above, foreign keys to organization/project, non-negative unit checks, allowed reservation states `RESERVED|COMMITTED|RELEASED`, and absence of raw token/secret columns.
+Assert all uniqueness/foreign-key constraints above, non-negative unit checks, reservation states `RESERVED|COMMITTED|RELEASED`, explicit subscription-state checks and absence of raw token/secret columns.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -103,7 +110,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement migration**
 
-Use `timestamptz`, integer units, explicit status CHECK constraints and indexes for current-month usage reads and per-organization activity history.
+Use `timestamptz`, integer units, explicit CHECK constraints and indexes for current-window usage plus organization time-range queries. Seed no paid plan state from client-visible data.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -125,9 +132,7 @@ git commit -m "feat: add entitlement and usage schema"
 - `releaseUsage({store,reservationId,reason})`.
 - `getUsageSummary({store,organizationId,windowStart})`.
 
-- [ ] **Step 1: Write RED tests for concurrency/idempotency semantics**
-
-Tests must prove:
+- [ ] **Step 1: Write RED idempotency/concurrency tests**
 
 ```js
 const a=await reserveUsage({...base,idempotencyKey:'req-1'});
@@ -135,7 +140,7 @@ const b=await reserveUsage({...base,idempotencyKey:'req-1'});
 assert.equal(a.id,b.id);
 ```
 
-and simulate two reservations racing for one remaining unit; exactly one must become `RESERVED`, the other must throw `QUOTA_EXCEEDED`/429. Also prove release of a KATA internal failure returns the reserved unit and a completed BLOCKED assessment commits it.
+Simulate two reservations racing for one remaining unit; exactly one becomes `RESERVED` and the other throws `QUOTA_EXCEEDED` with 429. Prove an internal KATA failure releases the unit while a completed report whose result is BLOCKED commits it.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -143,11 +148,9 @@ Run: `node --test tests/commercial-usage.test.js`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement reservation with one transaction and row locking**
+- [ ] **Step 3: Implement reservation under one transaction/row lock**
 
-Inside `store.transaction`, select/create the current bucket, lock it (`FOR UPDATE` in the SQL store), check `used_units + reserved_units + units <= limit`, insert the unique reservation, and atomically increment reserved units. A duplicate idempotency key returns the existing reservation without incrementing again.
-
-Finalize by moving units from reserved to used for committed outcomes or decrementing reserved for released outcomes. Terminal transitions are idempotent.
+Inside `store.transaction`, lock/create the current bucket, check `used_units + reserved_units + units <= limit`, insert the unique reservation and increment reserved units. On duplicate idempotency key, return the existing reservation without incrementing again. Terminal finalize/release operations are themselves idempotent.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -166,11 +169,11 @@ git commit -m "feat: add atomic usage reservation ledger"
 **Interfaces:**
 - `issueCiToken({store,actor,projectId,environmentId,scopes}) -> {token,record}`.
 - `verifyCiToken({store,presentedToken,requiredScope,projectId,environmentId})`.
-- `revokeCiToken(...)`.
+- `revokeCiToken({store,actor,tokenId})`.
 
 - [ ] **Step 1: Write RED least-privilege tests**
 
-Prove a token for project A cannot submit/read project B, an environment-scoped token cannot act on sibling environments, `ci:enforce` is not implied by `runs:create`, and plans without `ciTokens` cannot issue one.
+Prove a token for project A cannot submit/read project B, an environment-scoped token cannot act on sibling environments, `ci:enforce` is not implied by `runs:create`, plans without `ciTokens` cannot issue one, and raw CI tokens are one-time reveal/hash-only at rest.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -178,9 +181,9 @@ Run: `node --test tests/commercial-ci-tokens.test.js`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement token hashing using the same secure key primitive as Plan A**
+- [ ] **Step 3: Implement token hashing with the Plan A key primitive**
 
-Use a distinct recognizable prefix such as `kata_ci_`; persist only prefix/hash/scopes. The verifier returns a service principal containing immutable organization/project/environment scope.
+Use prefix `kata_ci_`; persist prefix/hash/scopes only. The verifier returns an immutable service principal containing organization/project/environment scope.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -190,20 +193,21 @@ git add lib/commercial/ci-tokens.js tests/commercial-ci-tokens.test.js
 git commit -m "feat: add least privilege CI principals"
 ```
 
-### Task 5: Wire entitlement/usage APIs without plan-string authorization
+### Task 5: Expose public pricing and authenticated usage/credential APIs
 
 **Files:**
 - Modify: `lib/commercial/router.js`
 - Create: `tests/commercial-entitlement-api.test.js`
 
 **Interfaces:**
-- `GET /api/usage` returns current effective limits/consumption.
+- `GET /api/pricing` is public and returns `getPublicPlans()` only.
+- `GET /api/usage` returns current effective limits and consumption for the authenticated tenant.
 - `GET /api/account` includes effective entitlement snapshot for rendering only.
-- `POST /api/ci-tokens` and DELETE route use capability/scope checks.
+- `POST /api/ci-tokens` and revoke route use server capability/scope checks.
 
-- [ ] **Step 1: Write RED route tests**
+- [ ] **Step 1: Write RED HTTP tests**
 
-Assert a request body `{plan:'team'}` changes nothing, a Free user cannot create API/CI keys, a Developer can create API keys but cannot create organization team membership beyond entitlement, and Team CI token issuance succeeds within project scope.
+Assert a body/header such as `{plan:'team'}` or `X-Kata-Plan: team` changes nothing, Free cannot create API/CI keys, Developer may create API keys but not Team-only CI enforcement, Team CI-token issuance succeeds within scope, and `/api/pricing` exposes no Razorpay plan identifiers or entitlement override internals.
 
 - [ ] **Step 2: Confirm RED**
 
@@ -211,14 +215,14 @@ Run: `node --test tests/commercial-entitlement-api.test.js`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Wire the router to `deriveEffectiveEntitlements` and usage service**
+- [ ] **Step 3: Wire router to the canonical registry**
 
-Commercial routes must resolve billing state from store, derive entitlements server-side, then authorize the requested capability. Do not accept a plan/capability override header.
+Resolve subscription state from store, derive entitlements server-side, authorize the capability, then call the operation. `/api/pricing` is display data only and is never consulted by the authorization path.
 
-- [ ] **Step 4: Run complete plan gate**
+- [ ] **Step 4: Run complete Plan B gate**
 
 ```bash
-node --test tests/commercial-entitlement-api.test.js tests/commercial-entitlements.test.js tests/commercial-usage.test.js tests/commercial-ci-tokens.test.js
+node --test tests/commercial-entitlements.test.js tests/commercial-usage-schema.test.js tests/commercial-usage.test.js tests/commercial-ci-tokens.test.js tests/commercial-entitlement-api.test.js
 npm run check
 ```
 
@@ -228,9 +232,9 @@ Expected: all tests and existing KATA release checks PASS.
 
 ```bash
 git add lib/commercial/router.js tests/commercial-entitlement-api.test.js
-git commit -m "feat: enforce commercial entitlements and usage"
+git commit -m "feat: enforce commercial entitlements and expose pricing"
 ```
 
 ## Plan B Completion Gate
 
-Plan B is complete only when plan strings cannot directly authorize features, effective entitlements are server-derived, concurrent quota reservations cannot overspend, retries are idempotent, failed internal operations can release quota safely, CI credentials are least-privilege, and `npm run check` remains green.
+Plan B is complete only when plan strings cannot directly authorize features, public pricing is derived from the same registry without exposing secrets, effective entitlements are server-derived, concurrent quota reservations cannot overspend, retries are idempotent, failed internal operations release quota safely, CI credentials are least-privilege, and `npm run check` remains green.
