@@ -42,3 +42,10 @@ test('browser-scoped service restriction leaves independently permitted server A
   assert.equal(graph.paths.server_api.status,'possible');
   assert.deepEqual(graph.decision,{status:'possible',primaryPath:'server_api'});
 });
+
+test('documented API without server-side evidence remains unknown instead of being declared unavailable',()=>{
+  const {serverSideApiAvailable,...withoutServerEvidence}=base;
+  const graph=buildInteropGraph({...withoutServerEvidence,webMcpApi:'unavailable'});
+  assert.equal(graph.paths.server_api.status,'unknown');
+  assert.equal(graph.paths.server_api.availability,'unknown');
+});
