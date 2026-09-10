@@ -40,6 +40,10 @@ A commercial launch is not considered ready until that path is functional, teste
 8. No production deployment is successful until the exact verified source SHA is live on the canonical production URL and health, capability, legal-readiness, and billing-readiness checks all pass.
 9. ₹0 fixed infrastructure spend is a bootstrap constraint, not a promise of infinite free capacity. The production configuration must fail closed at provider free-plan hard limits instead of silently creating paid usage.
 10. Enterprise hosted SLA claims are prohibited while the service depends on free-tier infrastructure without a contractual SLA. Enterprise self-hosting/customer-funded hosting may be sold separately.
+11. Netlify Identity browser authentication is cookie-backed; every unsafe cookie-authenticated management request must satisfy an exact same-origin CSRF check before business logic executes.
+12. Bare npm imports are not shipped directly to browsers. Browser dependencies are bundled into first-party integrity-bound assets so CSP does not need CDN/runtime-import exceptions.
+13. Team invitation tokens are one-time reveal, hash-only at rest, expiry-bound, and acceptance is tied to the verified invited email address.
+14. Customer tenant roles and mutable Identity metadata never confer KATA platform-support/operator authority; any operator capability is a separate server-configured principal boundary.
 
 ## 3. Commercial positioning
 
@@ -144,12 +148,14 @@ Identity is an authentication provider only. KATA authorization lives in KATA's 
 Authentication contract:
 
 - server validates provider-issued identity/JWT for every authenticated request;
+- browser sessions use the provider's secure same-origin cookie model and are never exported into browser-managed bearer-token storage;
+- unsafe browser-session requests require an exact `Origin` match to the KATA request origin before mutation;
 - user ID comes from the verified identity subject, never a request body field;
-- user profile display data is not authorization data;
+- user profile display data and mutable Identity metadata are not authorization data;
 - signup creates exactly one personal organization through an idempotent provisioning transaction;
 - recovery and email-change use provider-supported flows;
 - account deletion revokes/removes commercial records according to retention/legal requirements before the identity account is removed;
-- service/API keys are separate principals and never masquerade as interactive user sessions.
+- service/API/CI keys are separate principals and never masquerade as interactive user sessions.
 
 ## 6. Tenant and organization model
 
@@ -159,6 +165,7 @@ Core entities:
 users
 organizations
 organization_members
+organization_invitations
 projects
 project_environments
 api_keys
@@ -195,6 +202,8 @@ verified principal
 No endpoint may authorize merely because an authenticated user can guess a project ID or organization ID.
 
 Organization deletion requires OWNER authority, a fresh confirmation, and an explicit retention/deletion job/receipt. Ownership transfer cannot leave an organization ownerless.
+
+Team invitations use cryptographically random tokens whose raw values are returned only to the inviter/recipient flow once, while the database stores only a keyed digest, intended email, role, issuer, expiry and consumption/revocation state. Acceptance requires a verified authenticated email matching the normalized invitation email and consumes the token transactionally with membership creation.
 
 ## 7. Projects and environments
 
@@ -376,18 +385,23 @@ Proposed management API namespace:
 /api/account
 /api/organizations
 /api/organizations/:orgId/members
+/api/organizations/:orgId/invitations
+/api/invitations/accept
 /api/projects
 /api/projects/:projectId
 /api/projects/:projectId/environments
 /api/projects/:projectId/runs
 /api/projects/:projectId/reports
 /api/keys
+/api/ci-tokens
+/api/pricing
 /api/usage
 /api/billing/checkout
 /api/billing/subscription
 /api/billing/webhook/razorpay
 /api/audit
 /api/support
+/api/status
 /api/legal/acceptance
 /api/readiness/commercial
 ```
@@ -475,7 +489,8 @@ Authenticated first-run flow:
 
 ```text
 account provisioned
- -> personal org created
+ -> accept pending invitation if applicable
+ -> personal/team org resolved
  -> create project
  -> choose target type: website / API / MCP / authenticated browser app
  -> run supported assessment or install/use extension/CLI for authenticated target
@@ -485,6 +500,8 @@ account provisioned
 ```
 
 The UI must not ask users to paste raw HTML/CSS/JS as the primary product workflow. Modern applications are evaluated through their actual URLs, APIs, MCP endpoints, browser context, extension evidence, or customer-run CLI/CI.
+
+Browser authentication uses current Netlify Identity flows for signup, login, logout, OAuth callback handling, email confirmation and password recovery. The browser does not copy Identity session tokens into local/session storage or arbitrary Authorization headers. The browser application is bundled into first-party static assets during `npm run build`, and the emitted bundle is covered by KATA's integrity manifest.
 
 Navigation becomes product-oriented:
 
@@ -536,6 +553,8 @@ Severity taxonomy:
 - SEV-3: localized defect or integration regression with workaround.
 - SEV-4: question/documentation/request.
 
+Customer membership is not platform-operator authority. Any internal support mutation uses a distinct server-configured operator principal boundary, defaults closed when unconfigured, and generates an audit event.
+
 ## 18. Status and observability
 
 `/api/health` remains lightweight service health. Add `/api/readiness/commercial` for machine-readable commercial launch/readiness state.
@@ -553,6 +572,7 @@ legalConfigured
 supportConfigured
 providerBudgetConfigured
 migrationsCurrent
+releaseGovernanceVerified
 status
 ```
 
@@ -566,7 +586,7 @@ Secrets and full sensitive request bodies are excluded from logs.
 
 Audit events are append-only from ordinary application APIs. They cover:
 
-- organization/member changes;
+- organization/member/invitation changes;
 - project creation/archive;
 - API key/CI token create/revoke;
 - policy changes;
@@ -715,6 +735,7 @@ Required examples:
 - unique billing provider event ID;
 - unique API key hash/prefix identifier as appropriate;
 - unique membership `(organization_id, user_id)`;
+- unique active invitation/digest rules preventing ambiguous reuse;
 - exactly one effective owner invariant enforced transactionally;
 - unique usage reservation idempotency key within the relevant principal/scope;
 - indexes for organization/project/run/time-range dashboard queries.
@@ -728,6 +749,9 @@ Before monetization launch, tests must prove:
 - user A cannot read/write user B's organization/project/report/key data;
 - MEMBER cannot mutate billing/membership/policy;
 - ADMIN cannot transfer/remove the final OWNER where prohibited;
+- unsafe cookie-authenticated management requests fail without an exact same-origin Origin;
+- mutable Identity metadata cannot create KATA tenant/plan/operator authority;
+- invitation tokens are hash-only at rest, expiry-bound, one-time, and email-bound;
 - revoked API keys fail immediately;
 - key scopes are enforced server-side;
 - plan entitlements cannot be overridden by request body/header/browser storage;
@@ -740,7 +764,8 @@ Before monetization launch, tests must prove:
 - existing MCP/WebMCP/browser origin/auth/CSP/Permissions Policy restrictions remain unchanged;
 - commercial endpoints enforce body/time/rate limits;
 - logs/audit events redact secrets;
-- account deletion/export respects tenant boundaries.
+- account deletion/export respects tenant boundaries;
+- browser production assets contain no unresolved external package import that would require weakening CSP.
 
 ## 27. Testing strategy
 
@@ -749,14 +774,15 @@ Every implementation subsystem follows RED -> GREEN -> refactor discipline.
 Test layers:
 
 1. pure unit tests for entitlement, billing-state mapping, scopes, quota arithmetic, URL validation and policy evaluation;
-2. database/integration tests for tenant isolation, transactions, idempotency, concurrent quota reservation and billing transitions;
-3. API contract tests for identity, organizations, projects, keys, usage, billing and readiness;
-4. browser/UI tests for onboarding, project creation, key one-time reveal, billing states, member administration and inaccessible controls;
+2. database/integration tests for tenant isolation, transactions, invitations, idempotency, concurrent quota reservation and billing transitions;
+3. API contract tests for identity/CSRF, organizations, projects, keys, usage, billing and readiness;
+4. browser/UI tests for Identity callbacks/recovery, onboarding, invitation continuation, project creation, key one-time reveal, billing states, member administration and inaccessible controls;
 5. existing full KATA protocol suite to catch interoperability regressions;
-6. static/security checks;
-7. CodeQL;
-8. preview deployment smoke tests;
-9. production exact-SHA/readiness/API smoke tests.
+6. browser bundle/integrity checks;
+7. static/security checks;
+8. CodeQL;
+9. preview deployment smoke tests;
+10. production exact-SHA/readiness/API smoke tests.
 
 No subsystem is considered finished merely because its happy-path UI works.
 
@@ -766,11 +792,11 @@ This design is intentionally decomposed into independently reviewable implementa
 
 ### Plan A — Commercial foundation
 
-Identity verification adapter, database abstraction/migrations, users, organizations, memberships, projects, environments, API-key primitives, tenant authorization, and commercial readiness skeleton.
+Identity verification adapter, database abstraction/migrations, users, organizations, memberships/invitations, projects, environments, API-key primitives, tenant authorization, cookie-session CSRF, and commercial readiness skeleton.
 
 ### Plan B — Entitlements and metering
 
-Canonical plan registry, entitlement evaluator, scoped service principals, atomic quota reservations, usage outcomes, usage dashboard/API, and CI token foundation.
+Canonical plan/pricing registry, entitlement evaluator, scoped service principals, atomic quota reservations, usage outcomes, usage dashboard/API, and CI token foundation.
 
 ### Plan C — Razorpay billing
 
@@ -782,11 +808,11 @@ Project-driven compatibility runs, stored reports/findings, baselines, regressio
 
 ### Plan E — Commercial UX, positioning, onboarding and documentation
 
-Landing/navigation/product copy, account/org/project onboarding, pricing, usage/billing/team/audit/support interfaces, developer docs, README/llms.txt alignment.
+Landing/navigation/product copy, current Netlify Identity flows, account/org/project/invitation onboarding, pricing, usage/billing/team/audit/support interfaces, first-party browser bundling, README/llms.txt alignment.
 
 ### Plan F — Legal/privacy/support/status/enterprise foundation
 
-Legal templates/config gates, acceptance tracking, export/delete flows, support tickets/severity, status/readiness surface, audit export, retention controls, self-hosting contract.
+Legal templates/config gates, acceptance tracking, export/delete flows, support tickets/severity, separate platform-operator authority, status/readiness surface, audit export, retention controls, self-hosting contract.
 
 ### Plan G — Commercial production migration and release governance
 
@@ -801,6 +827,7 @@ KATA may be called monetization-ready only when all of the following are true:
 - a new user can self-register and recover an account;
 - tenant isolation is verified;
 - personal organization provisioning is reliable/idempotent;
+- team invitations are secure and self-service;
 - projects/environments work;
 - a user can obtain real compatibility value without manual founder intervention;
 - Developer/Team plans map to central server entitlements;
@@ -822,9 +849,10 @@ External merchant/legal configuration may remain operator-owned: Razorpay KYC/li
 
 ## 30. Verified external assumptions as of 2026-09-10
 
-- Netlify Identity is available on credit-based Free plans at no additional Identity fee and supports email/password, supported OAuth providers, server-side Functions verification, recovery, and role primitives. Custom outgoing identity email and Identity audit log require Pro, so KATA must not depend on those for the Free bootstrap architecture.
+- Netlify Identity is available on credit-based Free plans at no additional Identity fee and supports email/password, supported OAuth providers, server-side Functions verification, recovery, and role primitives. The implementation uses the current cookie-backed Identity session behavior, current callback/recovery APIs, and treats KATA authorization as a separate database concern.
 - Netlify's credit-based Free plan provides 300 credits/month with a hard limit and no auto-recharge. Production deploys and compute/bandwidth/web requests consume credits. The design therefore budgets provider use rather than assuming unlimited free infrastructure.
 - Netlify Database consumes compute and bandwidth credits; the historical free-storage period ended before this design date. KATA must treat database activity as metered provider usage.
+- Browser npm dependencies require a build-time bundle in KATA's current static architecture; production CSP remains first-party rather than adding third-party runtime script origins.
 - Razorpay webhook signatures use HMAC-SHA256 over the raw request body. Duplicate events can occur, the `x-razorpay-event-id` header is the deduplication key, and event ordering is not guaranteed.
 - The Digital Personal Data Protection Rules, 2025 were published by India's Ministry of Electronics and Information Technology on 2025-11-14 with an associated enforcement timeline. KATA's live legal/privacy launch must be checked against the provisions currently in force at deployment time.
 
