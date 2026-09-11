@@ -94,6 +94,10 @@ jobs:
           version="$(python -c "import json; print(json.load(open('server.json'))['version'])")"
           response="$(curl --fail --silent --show-error --location --get \
             --data-urlencode "search=$name" \
+            --retry 4 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            --connect-timeout 10 \
             --max-time 20 \
             "$REGISTRY_URL/v0.1/servers")"
           set +e
@@ -127,7 +131,12 @@ jobs:
         run: |
           set -euo pipefail
           archive="mcp-publisher_linux_amd64.tar.gz"
-          curl --fail --silent --show-error --location --max-time 60 \
+          curl --fail --silent --show-error --location \
+            --retry 4 \
+            --retry-all-errors \
+            --retry-delay 3 \
+            --connect-timeout 10 \
+            --max-time 60 \
             -o "$archive" \
             "https://github.com/modelcontextprotocol/registry/releases/download/$PUBLISHER_VERSION/$archive"
           echo "$PUBLISHER_SHA256  $archive" | sha256sum --check --strict
@@ -152,11 +161,13 @@ jobs:
           name="$(python -c "import json; print(json.load(open('server.json'))['name'])")"
           version="$(python -c "import json; print(json.load(open('server.json'))['version'])")"
           for attempt in 1 2 3 4 5 6; do
-            response="$(curl --fail --silent --show-error --location --get \
+            if response="$(curl --fail --silent --show-error --location --get \
               --data-urlencode "search=$name" \
+              --connect-timeout 10 \
               --max-time 20 \
-              "$REGISTRY_URL/v0.1/servers")"
-            if python - "$name" "$version" "$response" <<'PY'
+              "$REGISTRY_URL/v0.1/servers")"; then
+              set +e
+              python - "$name" "$version" "$response" <<'PY'
           import json, sys
           name, version, raw = sys.argv[1:]
           expected = json.load(open('server.json'))
@@ -172,8 +183,16 @@ jobs:
                   raise SystemExit(0)
           raise SystemExit(1)
           PY
-            then
-              exit 0
+              status=$?
+              set -e
+              if [[ "$status" -eq 0 ]]; then
+                exit 0
+              fi
+              if [[ "$status" -eq 2 ]]; then
+                exit 2
+              fi
+            else
+              echo "Registry transport failure on attempt $attempt; retrying within bounded verification budget" >&2
             fi
             sleep 5
           done
