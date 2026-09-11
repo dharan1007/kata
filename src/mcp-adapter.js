@@ -36,6 +36,8 @@ async function boundedText(response,maxBytes){if(response?.body?.getReader){cons
 async function readSseJsonRpc(response,id,maxBytes){const text=await boundedText(response,maxBytes);let data=[];for(const line of text.split(/\r?\n/)){if(line.startsWith(':'))continue;if(line.startsWith('data:'))data.push(line.slice(5).trimStart());else if(line===''){if(data.length){const raw=data.join('\n');data=[];try{const value=JSON.parse(raw);if(value?.id===id)return value;}catch{}}}}if(data.length){try{const value=JSON.parse(data.join('\n'));if(value?.id===id)return value;}catch{}}throw new Error('MCP SSE response ended without the final JSON-RPC response.');}
 async function readJsonRpc(response,id,maxBytes=MAX_RESPONSE_BYTES){const type=String(response?.headers?.get?.('content-type')??'').toLowerCase();if(type.includes('text/event-stream'))return readSseJsonRpc(response,id,maxBytes);if(response?.body?.getReader||typeof response?.text==='function')return JSON.parse(await boundedText(response,maxBytes));if(typeof response?.json==='function')return response.json();throw new Error('MCP JSON-RPC response body is unavailable.');}
 function timeoutError(method){const error=new Error(`MCP ${method} timed out.`);error.code='MCP_TIMEOUT';return error;}
+function protocolError(payload,id,method){const detail=payload?.error;if(payload?.jsonrpc!=='2.0'||payload?.id!==id||!detail||typeof detail!=='object'||Array.isArray(detail)||!Number.isInteger(detail.code)||typeof detail.message!=='string')return null;const error=new Error(`MCP ${method} returned JSON-RPC error ${detail.code}: ${detail.message}`);error.code=detail.code;if(Object.prototype.hasOwnProperty.call(detail,'data'))error.data=detail.data;return error;}
+function httpError(method,status){return new Error(`MCP ${method} failed with HTTP ${status??'unknown'}.`);}
 async function post(endpoint,method,params,options={}){
   const traceContext=normalizeMcpTraceContext(options.traceContext);
   const fetchImpl=options.fetchImpl??globalThis.fetch;if(typeof fetchImpl!=='function')throw new Error('fetch is unavailable.');
@@ -54,11 +56,16 @@ async function post(endpoint,method,params,options={}){
     try{response=await fetchImpl(safeEndpoint(endpoint).href,{method:'POST',headers:requestHeaders(method,options.trustedMcpHeaders,options.extraHeaders),body:JSON.stringify(requestBody(id,method,params,{tasksExtension:options.tasksExtension===true,traceContext})),credentials:'omit',cache:'no-store',redirect:'manual',signal:controller.signal});}
     catch(error){if(timedOut)throw timeoutError(method);throw error;}
     if(response?.status===401){const error=new Error('MCP authorization is required before this operation can run.');error.code='MCP_AUTH_REQUIRED';throw error;}
-    if(!response?.ok)throw new Error(`MCP ${method} failed with HTTP ${response?.status??'unknown'}.`);
     let payload;
+    if(!response?.ok){
+      if(response?.status!==400)throw httpError(method,response?.status);
+      try{payload=await readJsonRpc(response,id,maxResponseBytes);}catch{if(timedOut)throw timeoutError(method);throw httpError(method,response?.status);}
+      const error=protocolError(payload,id,method);if(error)throw error;
+      throw httpError(method,response?.status);
+    }
     try{payload=await readJsonRpc(response,id,maxResponseBytes);}catch(error){if(timedOut)throw timeoutError(method);throw error;}
     if(payload?.jsonrpc!=='2.0'||payload?.id!==id)throw new Error(`MCP ${method} returned an invalid JSON-RPC response.`);
-    if(payload.error){const error=new Error(`MCP ${method} returned JSON-RPC error ${payload.error.code}: ${payload.error.message??'unknown error'}`);error.code=payload.error.code;throw error;}
+    if(payload.error){const error=protocolError(payload,id,method);if(error)throw error;throw new Error(`MCP ${method} returned an invalid JSON-RPC error response.`);}
     return payload.result;
   }finally{
     clearTimer(timer);
