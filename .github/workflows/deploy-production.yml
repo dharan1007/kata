@@ -13,11 +13,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  classify:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_required: ${{ steps.changes.outputs.deploy_required }}
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout verified main SHA with parent
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+      - name: Classify whether this SHA can change production runtime
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          parent="$(git rev-parse "$EXPECTED_SHA^1")"
+          deploy_required=false
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              .github/*|tests/*)
+                ;;
+              *)
+                deploy_required=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "$parent" "$EXPECTED_SHA")
+          echo "deploy_required=$deploy_required" >> "$GITHUB_OUTPUT"
+          echo "Production deployment required: $deploy_required"
+
+  deploy:
+    needs: classify
+    if: needs.classify.outputs.deploy_required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -50,15 +86,22 @@ jobs:
         run: |
           set -euo pipefail
           converged=0
+          last_status="unknown"
           for attempt in $(seq 1 120); do
-            if curl -fsS --retry 2 --retry-all-errors --retry-delay 1 "$CANONICAL_URL/release.json" > /tmp/canonical-release.json && \
+            status="$(curl --silent --show-error --location --output /tmp/canonical-release.json --write-out '%{http_code}' --retry 2 --retry-all-errors --retry-delay 1 "$CANONICAL_URL/release.json" || true)"
+            last_status="$status"
+            if [ "$status" = "200" ] && \
                EXPECTED_SHA="$EXPECTED_SHA" node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('/tmp/canonical-release.json','utf8')); if(r.source?.sha!==process.env.EXPECTED_SHA.toLowerCase()) process.exit(1); if(r.source?.provenance!=='source-bound') process.exit(1); if(r.source?.authority!=='vercel-git') process.exit(1); if(r.source?.repository!=='dharan1007/kata') process.exit(1); if(r.source?.ref!=='main') process.exit(1); if(r.source?.verification?.providerBound!==true || r.source?.verification?.headMatches!==true || r.source?.verification?.clean!==null) process.exit(1);"; then
               converged=1
               break
             fi
+            if [ "$status" = "401" ] || [ "$status" = "403" ]; then
+              echo "Canonical production verification is blocked by an access/protection policy (HTTP $status). Do not weaken the policy; configure a Vercel-supported trusted automation path for GitHub Actions if protected production is intentional." >&2
+              exit 1
+            fi
             sleep 5
           done
-          if [ "$converged" != 1 ]; then echo "Canonical alias did not converge to expected provider-bound Vercel Git release" >&2; exit 1; fi
+          if [ "$converged" != 1 ]; then echo "Canonical alias did not converge to expected provider-bound Vercel Git release (last HTTP status: $last_status)" >&2; exit 1; fi
       - name: Verify canonical health integrity APIs pricing and commercial readiness
         shell: bash
         run: |
