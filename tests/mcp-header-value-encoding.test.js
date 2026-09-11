@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleMcpRequest,MCP_VERSION} from '../lib/server/mcp.js';
+import {compileMcpToolInventory,buildMcpToolCallPreview} from '../src/mcp-adapter.js';
 
 const META_PROTOCOL_VERSION='io.modelcontextprotocol/protocolVersion';
 const META_CLIENT_CAPABILITIES='io.modelcontextprotocol/clientCapabilities';
@@ -73,4 +74,22 @@ test('MCP 2026 rejects malformed Base64-sentinel routing headers instead of leni
 
   assert.equal(response.status,400);
   assert.equal(response.body.error.code,-32020);
+});
+
+test('MCP 2026 Base64-encodes a literal sentinel-shaped x-mcp-header value',()=>{
+  const literal='=?base64?literal?=';
+  const inventory=compileMcpToolInventory([{
+    name:'echo',
+    inputSchema:{
+      type:'object',
+      properties:{value:{type:'string','x-mcp-header':'Val'}},
+      required:['value'],
+      additionalProperties:false
+    }
+  }]);
+
+  assert.equal(inventory.rejected.length,0);
+  const preview=buildMcpToolCallPreview(inventory.tools[0],{value:literal},'https://example.test/mcp');
+
+  assert.equal(preview.headers['Mcp-Param-Val'],encodedHeader(literal));
 });
