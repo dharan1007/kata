@@ -33,7 +33,7 @@ test('OpenAPI discovery only negotiates representation formats the parser can co
   );
 
   assert.doesNotMatch(observedAccept,/(?:application|text)\/ya?ml/i);
-  assert.equal(result.resources[0]?.status,'ok');
+  assert.equal(result.resources[0]?.status,'parsed');
   assert.equal(result.descriptions[0]?.title,'Negotiated API');
   assert.equal(result.operations[0]?.operationId,'health');
 });
