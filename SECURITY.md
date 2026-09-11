@@ -10,6 +10,7 @@ Release invariants:
 - automation activation and execution are bound to fresh preview fingerprints;
 - nested tool execution is capped at four levels;
 - MCP browser Origins are denied unless explicitly allowlisted;
+- remote MCP client endpoints require HTTPS; cleartext HTTP is accepted only for loopback development endpoints;
 - optional remote MCP bearer authentication is enforced before dispatch;
 - third-party MCP execution never borrows cookies, bearer tokens, API keys, or browser-storage credentials;
 - MCP `input_required` responses are user-driven, bounded, and separately previewed for each round;
