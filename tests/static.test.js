@@ -32,10 +32,10 @@ test('browser WebMCP canonical contract module is packaged as an integrity-bound
   assert.match(build,/lib\/shared\/tool-contracts\.js/);
 });
 
-test('public api directory contains endpoint modules only',()=>{
+test('public api directory contains only the explicitly reviewed production endpoint modules',()=>{
   const apiDir=new URL('../api/',import.meta.url);
   const entries=fs.readdirSync(apiDir,{withFileTypes:true});
   assert.deepEqual(entries.filter(e=>e.isDirectory()).map(e=>e.name),[],'helper libraries must live outside /api so Vercel cannot expose them as routes');
   const endpointNames=entries.filter(e=>e.isFile()&&e.name.endsWith('.js')).map(e=>e.name).sort();
-  assert.deepEqual(endpointNames,['agents.js','capabilities.js','compile.js','execute.js','health.js','invoke.js','mcp.js','openapi.js','search.js','triage.js']);
+  assert.deepEqual(endpointNames,['agents.js','capabilities.js','commercial-readiness.js','compile.js','execute.js','health.js','invoke.js','mcp.js','openapi.js','pricing.js','search.js','triage.js']);
 });
