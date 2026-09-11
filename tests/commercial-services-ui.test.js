@@ -38,3 +38,9 @@ test('production build and support contract include commercial services assets a
   assert.match(support,/SLA/i);
   assert.match(support,/payment|invoice/i);
 });
+
+test('clean /services URL is routed to the workflow services document',()=>{
+  const vercel=read('vercel.json');
+  assert.match(vercel,/"source"\s*:\s*"\/services"/);
+  assert.match(vercel,/"destination"\s*:\s*"\/services\.html"/);
+});
