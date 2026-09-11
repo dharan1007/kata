@@ -8,6 +8,7 @@
   "rewrites": [
     {"source":"/api/openalex/search","destination":"/api/search"},
     {"source":"/api/readiness/commercial","destination":"/api/commercial-readiness"},
+    {"source":"/services","destination":"/services.html"},
     {"source":"/dashboard","destination":"/index.html"},
     {"source":"/research","destination":"/index.html"},
     {"source":"/automations","destination":"/index.html"},
