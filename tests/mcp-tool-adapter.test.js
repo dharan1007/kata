@@ -90,3 +90,52 @@ test('never labels a full-JSON-Schema output as validated when KATA supports onl
   assert.equal(result.ok,true);
   assert.equal(result.receipt.outputValidation,'not-validated-unsupported-schema');
 });
+
+async function approvedToolCallWith(fetchImpl,extraOptions={}){
+  const candidate=compileMcpToolInventory([tool]).tools[0];
+  const preview=buildMcpToolCallPreview(candidate,{id:'abc'},'https://example.com/mcp');
+  const fingerprint=await fingerprintMcpToolCallPreview(preview);
+  return executeModernMcpToolCall(preview,fingerprint,{approved:true,expectedFingerprint:fingerprint,fetchImpl,...extraOptions});
+}
+
+function jsonRpcErrorResponse(id,error){
+  return{ok:false,status:400,headers:{get:name=>String(name).toLowerCase()==='content-type'?'application/json':null},json:async()=>({jsonrpc:'2.0',id,error})};
+}
+
+test('surfaces a request-scoped modern HTTP 400 HeaderMismatch as an MCP protocol error',async()=>{
+  const fetchImpl=async()=>jsonRpcErrorResponse('kata-mcp-call',{code:-32020,message:'HeaderMismatch',data:{header:'Mcp-Method'}});
+  await assert.rejects(()=>approvedToolCallWith(fetchImpl),error=>{
+    assert.equal(error.code,-32020);
+    assert.equal(error.data.header,'Mcp-Method');
+    assert.match(error.message,/HeaderMismatch/);
+    return true;
+  });
+});
+
+test('preserves UnsupportedProtocolVersion data from a request-scoped modern HTTP 400',async()=>{
+  const data={supported:['2026-07-28'],requested:'2099-01-01'};
+  const fetchImpl=async()=>jsonRpcErrorResponse('kata-mcp-call',{code:-32022,message:'UnsupportedProtocolVersion',data});
+  await assert.rejects(()=>approvedToolCallWith(fetchImpl),error=>{
+    assert.equal(error.code,-32022);
+    assert.deepEqual(error.data,data);
+    return true;
+  });
+});
+
+test('does not trust a JSON-RPC-looking HTTP 400 addressed to a different request id',async()=>{
+  const fetchImpl=async()=>jsonRpcErrorResponse('different-request',{code:-32020,message:'HeaderMismatch'});
+  await assert.rejects(()=>approvedToolCallWith(fetchImpl),error=>{
+    assert.equal(error.code,undefined);
+    assert.match(error.message,/HTTP 400/);
+    return true;
+  });
+});
+
+test('keeps non-JSON modern HTTP 400 responses as bounded generic HTTP failures',async()=>{
+  const fetchImpl=async()=>({ok:false,status:400,headers:{get:()=> 'text/html'},text:async()=>'<html>proxy rejection</html>'});
+  await assert.rejects(()=>approvedToolCallWith(fetchImpl),error=>{
+    assert.equal(error.code,undefined);
+    assert.match(error.message,/HTTP 400/);
+    return true;
+  });
+});
