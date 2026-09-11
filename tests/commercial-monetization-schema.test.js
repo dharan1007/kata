@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const usage=await readFile(new URL('../netlify/database/migrations/002_entitlements_usage.sql',import.meta.url),'utf8');
-const billing=await readFile(new URL('../netlify/database/migrations/003_billing.sql',import.meta.url),'utf8');
+const usage=await readFile(new URL('../database/migrations/002_entitlements_usage.sql',import.meta.url),'utf8');
+const billing=await readFile(new URL('../database/migrations/003_billing.sql',import.meta.url),'utf8');
 
 test('usage schema enforces tenant quota idempotency and hash-only CI credentials',()=>{
   assert.match(usage,/create table if not exists subscription_accounts/i);
