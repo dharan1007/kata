@@ -122,7 +122,7 @@ export async function discoverBrowserApis(options={},runtime={}){
   if(catalog.status==='ok'&&(catalog.apiEndpoints.length||catalog.nestedCatalogs.length))evidence.push({code:'API_CATALOG_DISCOVERED',apiEndpointCount:catalog.apiEndpoints.length,nestedCatalogCount:catalog.nestedCatalogs.length});
   for(const source of selected){
     const url=safeHttpUrl(source,origin);if(!url)continue;
-    const fetched=await fetchText(url,origin,fetchFn,signal,'application/openapi+json, application/vnd.oai.openapi+json, application/json, application/yaml;q=0.7, text/yaml;q=0.7');
+    const fetched=await fetchText(url,origin,fetchFn,signal,'application/openapi+json, application/vnd.oai.openapi+json, application/json');
     if(!fetched.ok){resources.push({url:url.href,status:fetched.status,...(fetched.httpStatus?{httpStatus:fetched.httpStatus}:{})});evidence.push({code:'API_DESCRIPTION_FETCH_FAILED',url:url.href,status:fetched.status});continue;}
     const finalUrl=safeHttpUrl(fetched.finalUrl,url.href)??url,format=formatOf(fetched.contentType,finalUrl,fetched.text);if(format!=='json'){resources.push({url:url.href,finalUrl:finalUrl.href,status:'unsupported_format',format});evidence.push({code:'API_DESCRIPTION_UNSUPPORTED_FORMAT',url:finalUrl.href,format});continue;}
     let document;try{document=JSON.parse(fetched.text);}catch{resources.push({url:url.href,finalUrl:finalUrl.href,status:'invalid_json',format});evidence.push({code:'API_DESCRIPTION_INVALID_JSON',url:finalUrl.href});continue;}
