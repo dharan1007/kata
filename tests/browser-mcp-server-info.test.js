@@ -88,3 +88,14 @@ test('MCP 2026 active-tab discovery rejects invalid trace context before fetch',
   );
   assert.equal(fetchCalls,0);
 });
+
+test('active-tab MCP discovery rejects 127-prefixed DNS hostnames before fetch',async()=>{
+  const spoofedTab={id:8,url:'http://127.attacker.example/app'};
+  let fetchCalls=0;
+  const fetchImpl=async()=>{fetchCalls+=1;return response(discoverResult());};
+  await assert.rejects(
+    inspectMcpEndpoint(spoofedTab,'/mcp',{fetchImpl}),
+    /requires HTTPS|loopback/i
+  );
+  assert.equal(fetchCalls,0);
+});
