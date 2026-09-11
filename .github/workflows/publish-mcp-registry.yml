@@ -20,11 +20,48 @@ env:
   PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
 
 jobs:
-  publish:
+  classify:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'workflow_run'
+    runs-on: ubuntu-24.04
+    outputs:
+      publish_required: ${{ steps.changes.outputs.publish_required }}
+    env:
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout exact production-verifier SHA with parent
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Classify whether this SHA could have produced a new runtime release
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          parent="$(git rev-parse "$EXPECTED_SHA^1")"
+          publish_required=false
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              .github/*|tests/*)
+                ;;
+              *)
+                publish_required=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "$parent" "$EXPECTED_SHA")
+          echo "publish_required=$publish_required" >> "$GITHUB_OUTPUT"
+          echo "Registry publication required: $publish_required"
+
+  publish:
+    needs: classify
+    if: needs.classify.outputs.publish_required == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
