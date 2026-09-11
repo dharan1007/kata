@@ -1,0 +1,37 @@
+name: Audit MCP Sentinel Patch
+
+on:
+  push:
+    branches: [audit/mcp-header-sentinel-encoding]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: audit/mcp-header-sentinel-encoding
+      - name: Apply minimal MCP sentinel fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/mcp-adapter.js')
+          s=p.read_text()
+          old="function encodeHeaderString(value){const boundaryWhitespace=/^[\\t ]|[\\t ]$/.test(value);let plain=!boundaryWhitespace;"
+          new="function encodeHeaderString(value){const boundaryWhitespace=/^[\\t ]|[\\t ]$/.test(value);const sentinelShaped=value.startsWith('=?base64?')&&value.endsWith('?=');let plain=!boundaryWhitespace&&!sentinelShaped;"
+          if new in s:
+              raise SystemExit(0)
+          if old not in s:
+              raise SystemExit('Expected encoder source not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/mcp-adapter.js
+          git commit -m "fix: escape literal MCP Base64 sentinel headers"
+          git push origin HEAD:audit/mcp-header-sentinel-encoding
