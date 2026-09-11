@@ -1,0 +1,7 @@
+import {createHash} from 'node:crypto';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+const lockBytes=await readFile(new URL('../package-lock.json',import.meta.url));
+const lock=JSON.parse(lockBytes.toString('utf8'));const root=lock.packages?.[''];if(!root?.name||!root?.version)throw new Error('PACKAGE_LOCK_ROOT_MISSING');
+const lockHash=createHash('sha256').update(lockBytes).digest('hex'),now=new Date().toISOString();
+const document={spdxVersion:'SPDX-2.3',dataLicense:'CC0-1.0',SPDXID:'SPDXRef-DOCUMENT',name:`${root.name}-${root.version}`,documentNamespace:`https://github.com/dharan1007/kata/sbom/${root.version}/${lockHash}`,creationInfo:{created:now,creators:['Tool: kata-lockfile-sbom/1.0']},documentDescribes:['SPDXRef-Package-Root'],packages:[{SPDXID:'SPDXRef-Package-Root',name:root.name,versionInfo:root.version,downloadLocation:'NOASSERTION',filesAnalyzed:false,licenseConcluded:root.license||'NOASSERTION',licenseDeclared:root.license||'NOASSERTION',supplier:'NOASSERTION'}],relationships:[{spdxElementId:'SPDXRef-DOCUMENT',relationshipType:'DESCRIBES',relatedSpdxElement:'SPDXRef-Package-Root'}],annotations:[{annotationType:'OTHER',annotator:'Tool: kata-lockfile-sbom/1.0',annotationDate:now,comment:`package-lock.json sha256=${lockHash}; runtime dependency count=0`}]};
+await mkdir(new URL('../artifacts/',import.meta.url),{recursive:true});await writeFile(new URL('../artifacts/kata.spdx.json',import.meta.url),`${JSON.stringify(document,null,2)}\n`);console.log(`KATA SBOM generated; lock sha256=${lockHash}`);
