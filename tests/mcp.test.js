@@ -4,9 +4,9 @@ import {handleMcpRequest, MCP_VERSION, LEGACY_MCP_VERSION} from '../lib/server/m
 
 const modernMeta=(extra={})=>({'io.modelcontextprotocol/protocolVersion':MCP_VERSION,'io.modelcontextprotocol/clientCapabilities':{},...extra});
 
-test('MCP 2026-07-28 discovery advertises dual-era compatibility and remains cacheable',async()=>{
+test('MCP 2026-07-28 discovery advertises modern compatibility while legacy initialize remains separately supported',async()=>{
  const discover=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'server/discover'},body:{jsonrpc:'2.0',id:1,method:'server/discover',params:{_meta:modernMeta()}}});
- assert.equal(discover.status,200); assert.deepEqual(discover.body.result.supportedVersions,[MCP_VERSION,LEGACY_MCP_VERSION]);
+ assert.equal(discover.status,200); assert.deepEqual(discover.body.result.supportedVersions,[MCP_VERSION]);
  assert.equal(discover.body.result._meta['io.modelcontextprotocol/serverInfo'].name,'kata-webmcp');
  const list=await handleMcpRequest({headers:{'mcp-protocol-version':MCP_VERSION,'mcp-method':'tools/list'},body:{jsonrpc:'2.0',id:2,method:'tools/list',params:{_meta:modernMeta()}}});
  assert.ok(list.body.result.tools.length>=5); assert.equal(list.body.result.cacheScope,'public'); assert.ok(list.body.result.ttlMs>0);
@@ -149,5 +149,5 @@ test('MCP 2026-07-28 returns the dedicated UnsupportedProtocolVersion error for 
  });
  assert.equal(response.status,400);
  assert.equal(response.body.error.code,-32022);
- assert.deepEqual(response.body.error.data,{supported:[MCP_VERSION,LEGACY_MCP_VERSION],requested});
+ assert.deepEqual(response.body.error.data,{supported:[MCP_VERSION],requested});
 });
