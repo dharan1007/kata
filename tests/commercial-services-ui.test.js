@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {existsSync,readFileSync} from 'node:fs';
 
 const read=path=>readFileSync(path,'utf8');
+const CANONICAL_INTAKE='https://tally.so/r/xXAa0J';
 
 test('KATA ships a public workflow-services surface separate from SaaS plans',()=>{
   assert.equal(existsSync('services.html'),true,'services.html must exist');
@@ -11,7 +12,7 @@ test('KATA ships a public workflow-services surface separate from SaaS plans',()
   assert.match(html,/Workflow Build/);
   assert.match(html,/Team Deployment/);
   assert.match(html,/Customer-specific Integration/i);
-  assert.match(html,/https:\/\/tally\.so\/r\/J9Qpxr/);
+  assert.match(html,new RegExp(CANONICAL_INTAKE.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(html,/SLA/i);
   assert.match(html,/OpenAPI/i);
   assert.match(html,/MCP/i);
@@ -24,7 +25,7 @@ test('KATA loads a fail-closed commercial CTA from the existing app entrypoint',
   const cta=read('src/commercial-cta.js');
   assert.match(entry,/commercial-cta\.js/);
   assert.match(cta,/\/services/);
-  assert.match(cta,/https:\/\/tally\.so\/r\/J9Qpxr/);
+  assert.match(cta,new RegExp(CANONICAL_INTAKE.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(cta,/https:\/\//,'external checkout URLs must require HTTPS');
   assert.match(cta,/payment/i);
 });
@@ -34,6 +35,7 @@ test('production build and support contract include commercial services assets a
   const support=read('SUPPORT.md');
   assert.match(build,/services\.html/);
   assert.match(build,/src\/commercial-cta\.js/);
+  assert.match(build,new RegExp(CANONICAL_INTAKE.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(support,/paid engagement/i);
   assert.match(support,/SLA/i);
   assert.match(support,/payment|invoice/i);
