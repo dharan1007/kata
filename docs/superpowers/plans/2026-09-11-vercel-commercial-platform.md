@@ -1,80 +1,65 @@
-# Vercel Commercial Platform Implementation Plan
+# Vercel Production Blocker Remediation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Remove Netlify-specific commercial control-plane coupling and provide a fail-closed Vercel-compatible identity/database boundary without weakening authentication or tenant isolation.
+**Goal:** Remove KATA's host-specific commercial coupling, make MCP Registry publication resilient, and prevent Vercel production builds until the exact `main` SHA passes both the complete release gate and CodeQL.
 
-**Architecture:** Keep `lib/commercial/*` provider-agnostic. Move the SQL store into a generic PostgreSQL adapter with lazy pool resolution suitable for Vercel serverless runtimes, add an OIDC UserInfo identity adapter that only trusts a provider-validated bearer token, and expose a Vercel composition factory. Readiness must identify the configured provider types and concrete endpoint/connection prerequisites instead of trusting only boolean flags.
+**Architecture:** Keep `lib/commercial/*` provider-agnostic; use OIDC UserInfo and a generic PostgreSQL store for Vercel/serverless composition; keep canonical migrations host-neutral; use a committed Vercel `ignoreCommand` as a pre-build exact-SHA production gate; preserve the post-deploy provenance verifier and downstream MCP Registry publication.
 
-**Tech Stack:** Node.js 24, Web Fetch API, PostgreSQL store contract, OIDC UserInfo, Vercel Functions-compatible injected connection pool.
-
-**Spec:** GitHub issue #124.
+**Specs:** GitHub issues #124, #148 and #149.
 
 ## Global Constraints
 
 - Never infer identity from arbitrary request headers.
 - Never expose raw bearer tokens, database URLs, peppers, or provider secrets in readiness output.
-- Remote identity verification endpoints must use HTTPS.
-- Commercial routes remain fail closed until identity, database, migrations, billing, legal/support, provider budget, and release governance checks are ready.
-- Preserve current tenant, CSRF/origin, API-key, quota, audit, billing, and transaction semantics.
+- Remote identity verification endpoints must use HTTPS and must not follow redirects.
+- Commercial routes remain fail closed until real external readiness prerequisites are present.
+- Production uncertainty never means approval: stale source, failed/cancelled checks, provider/API failure and timeout all retain the existing deployment.
+- No long-lived Vercel deploy token is introduced.
 
----
+### Task 1: Provider-neutral commercial adapters
 
-### Task 1: Provider-neutral platform adapters
+- [x] Add `lib/platform/oidc-identity.js` with verified, bounded HTTPS UserInfo handling.
+- [x] Add `lib/platform/postgres-database.js` with eager or lazy pool contracts and pinned transaction clients.
+- [x] Add `lib/platform/vercel-commercial.js` composition.
+- [x] Reduce `netlify-database.js` to a compatibility wrapper.
+- [x] Add regression coverage for spoofed headers, stable identity claims and lazy database lifecycle.
 
-**Files:**
-- Create: `lib/platform/oidc-identity.js`
-- Create: `lib/platform/postgres-database.js`
-- Create: `lib/platform/vercel-commercial.js`
-- Modify: `lib/platform/netlify-identity.js`
-- Modify: `lib/platform/netlify-database.js`
-- Test: `tests/commercial-platform.test.js`
+### Task 2: Concrete readiness and migrations
 
-**Interfaces:**
-- `createOidcIdentityAdapter({userinfoUrl, fetchImpl}) -> { getPrincipal(request) }`
-- `createPostgresCommercialStore({pool,getPool}) -> CommercialStore`
-- `createVercelCommercialPlatform({userinfoUrl,fetchImpl,pool,getPool}) -> {provider,identityProvider,databaseProvider,identity,store}`
+- [x] Require `KATA_IDENTITY_PROVIDER=oidc` plus a valid HTTPS UserInfo URL.
+- [x] Require `KATA_DATABASE_PROVIDER=postgres` plus a PostgreSQL connection URL.
+- [x] Prevent boolean-only configured flags from marking those providers ready.
+- [x] Keep readiness output free of endpoint, hostname, credential, token and pepper values.
+- [x] Move canonical migrations to `database/migrations/` and update schema tests without changing SQL semantics.
 
-- [ ] Write regression tests proving arbitrary identity headers are ignored, OIDC bearer tokens are validated only through HTTPS UserInfo, only stable subject/email survive projection, invalid/unavailable providers fail closed, and lazy database pools can reconnect between operations.
-- [ ] Run the release gate and confirm the new tests fail before implementation.
-- [ ] Implement the adapters with bounded JSON response handling and no secret reflection.
-- [ ] Re-run the complete release gate.
+### Task 3: Registry reliability
 
-### Task 2: Readiness and deployment contract
+- [x] Add bounded all-error retries to the pre-publication Registry lookup.
+- [x] Keep network exhaustion fail closed instead of treating it as `exists=false`.
+- [x] Add bounded retries to the pinned publisher download while retaining SHA-256 verification.
+- [x] Keep post-publication transport failures inside the bounded convergence loop.
+- [x] Treat immutable metadata conflicts as immediate hard failures.
 
-**Files:**
-- Modify: `lib/commercial/readiness.js`
-- Modify: `tests/commercial-readiness.test.js`
-- Modify: `docs/PRODUCTION.md`
+### Task 4: Repository-controlled Vercel production ordering
 
-**Interfaces:**
-- `KATA_IDENTITY_PROVIDER=oidc`
-- `KATA_OIDC_USERINFO_URL=https://...`
-- `KATA_DATABASE_PROVIDER=postgres`
-- `DATABASE_URL` or `KATA_DATABASE_URL` must contain a PostgreSQL URL.
+- [x] Add regression tests proving Vercel production `main` cannot proceed without exact-SHA push successes for `KATA Release Gate` and `CodeQL`.
+- [x] Configure `vercel.json` `ignoreCommand` to invoke `scripts/vercel-prebuild-gate.mjs`.
+- [x] Allow non-main previews without polling production checks.
+- [x] Require Vercel production/repository metadata and current GitHub `main` SHA to match the candidate.
+- [x] Poll the exact SHA using bounded unauthenticated public GitHub Actions reads.
+- [x] Fail closed on failed/cancelled checks, stale SHA, malformed deployment identity, GitHub outage/rate limit or timeout.
+- [x] Recheck `main` after both required checks succeed before permitting the build.
+- [x] Preserve the existing post-deploy exact-source verifier and Registry ordering.
 
-- [ ] Add failing readiness tests proving boolean flags alone cannot mark identity/database ready.
-- [ ] Implement provider-aware fail-closed checks without emitting secret values.
-- [ ] Document Vercel as the authoritative production target and the injected serverless pool contract.
-- [ ] Re-run complete release gate and CodeQL.
+### Task 5: Verification and rollout
 
-### Task 3: Migrations path de-coupling
+- [x] Capture RED evidence for the missing Vercel commercial platform contract.
+- [x] Capture RED evidence for the missing Vercel pre-build gate.
+- [ ] Run the complete KATA Release Gate on the final combined head.
+- [ ] Run CodeQL on the same final head.
+- [ ] Merge only after both are green.
+- [ ] Verify the merged `main` push creates no Vercel production build before those exact-SHA checks succeed.
+- [ ] Verify canonical `/release.json`, `/api/health`, production logs and Registry workflow after promotion.
 
-**Files:**
-- Move canonical SQL migrations from `netlify/database/migrations/` to `database/migrations/`.
-- Modify: `tests/commercial-schema.test.js`
-- Modify: `tests/commercial-monetization-schema.test.js`
-
-**Interfaces:**
-- Canonical production migrations live under `database/migrations/` independent of host.
-
-- [ ] Update regression tests to the provider-neutral migration path.
-- [ ] Move all three migrations without changing SQL semantics.
-- [ ] Run complete release gate and verify schema invariants remain green.
-
-### Task 4: Release qualification
-
-- [ ] Verify the final PR diff contains no secret values and no security-control bypass.
-- [ ] Confirm complete KATA Release Gate passes on the final head.
-- [ ] Confirm CodeQL passes on the same head.
-- [ ] Leave the PR unmerged until #148 pre-alias production enforcement is active; this branch must not cause an ungated production promotion.
+GitHub `main` branch/ruleset enforcement (#117) remains an account-level repository administration control and is intentionally not represented as solved by application code.
