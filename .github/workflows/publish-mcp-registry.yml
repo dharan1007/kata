@@ -92,10 +92,18 @@ jobs:
           set -euo pipefail
           name="$(python -c "import json; print(json.load(open('server.json'))['name'])")"
           version="$(python -c "import json; print(json.load(open('server.json'))['version'])")"
-          response="$(curl --fail --silent --show-error --location --get \
+          if ! response="$(curl --fail --silent --show-error --location --get \
             --data-urlencode "search=$name" \
+            --connect-timeout 10 \
             --max-time 20 \
-            "$REGISTRY_URL/v0.1/servers")"
+            --retry 4 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --retry-max-time 90 \
+            "$REGISTRY_URL/v0.1/servers")"; then
+            echo "Registry lookup failed after bounded retry budget" >&2
+            exit 1
+          fi
           set +e
           python - "$name" "$version" "$response" <<'PY'
           import json, sys
@@ -127,7 +135,13 @@ jobs:
         run: |
           set -euo pipefail
           archive="mcp-publisher_linux_amd64.tar.gz"
-          curl --fail --silent --show-error --location --max-time 60 \
+          curl --fail --silent --show-error --location \
+            --connect-timeout 10 \
+            --max-time 60 \
+            --retry 4 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --retry-max-time 180 \
             -o "$archive" \
             "https://github.com/modelcontextprotocol/registry/releases/download/$PUBLISHER_VERSION/$archive"
           echo "$PUBLISHER_SHA256  $archive" | sha256sum --check --strict
@@ -152,11 +166,25 @@ jobs:
           name="$(python -c "import json; print(json.load(open('server.json'))['name'])")"
           version="$(python -c "import json; print(json.load(open('server.json'))['version'])")"
           for attempt in 1 2 3 4 5 6; do
-            response="$(curl --fail --silent --show-error --location --get \
+            if ! response="$(curl --fail --silent --show-error --location --get \
               --data-urlencode "search=$name" \
+              --connect-timeout 10 \
               --max-time 20 \
-              "$REGISTRY_URL/v0.1/servers")"
-            if python - "$name" "$version" "$response" <<'PY'
+              --retry 2 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --retry-max-time 45 \
+              "$REGISTRY_URL/v0.1/servers")"; then
+              if [[ "$attempt" -eq 6 ]]; then
+                echo "Registry verification transport failed after bounded retry budget" >&2
+                exit 1
+              fi
+              sleep 5
+              continue
+            fi
+
+            set +e
+            python - "$name" "$version" "$response" <<'PY'
           import json, sys
           name, version, raw = sys.argv[1:]
           expected = json.load(open('server.json'))
@@ -172,10 +200,17 @@ jobs:
                   raise SystemExit(0)
           raise SystemExit(1)
           PY
-            then
-              exit 0
+            status=$?
+            set -e
+            case "$status" in
+              0) exit 0 ;;
+              1) ;;
+              2) exit "$status" ;;
+              *) exit "$status" ;;
+            esac
+            if [[ "$attempt" -lt 6 ]]; then
+              sleep 5
             fi
-            sleep 5
           done
           echo "Registry did not expose the published KATA version with exact immutable metadata" >&2
           exit 1
