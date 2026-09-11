@@ -15,6 +15,8 @@ const EXECUTABLE_SCHEMA_KEYS=new Set(['type','enum','properties','required','add
 
 function boundedInt(value,fallback,min,max){const n=Number(value);return Number.isInteger(n)?Math.max(min,Math.min(max,n)):fallback;}
 function safeHttpUrl(raw){try{const url=new URL(String(raw));if(!['http:','https:'].includes(url.protocol)||url.username||url.password)return null;url.hash='';return url;}catch{return null;}}
+function isLoopbackHostname(hostname){const host=String(hostname??'').toLowerCase().replace(/\.$/,'');return host==='localhost'||host.endsWith('.localhost')||host==='::1'||host==='[::1]'||/^127(?:\.\d{1,3}){3}$/.test(host);}
+function secureCredentialTransport(url){return url?.protocol==='https:'||(url?.protocol==='http:'&&isLoopbackHostname(url.hostname));}
 function canonicalize(value){if(value===null||typeof value==='string'||typeof value==='boolean')return value;if(typeof value==='number'){if(!Number.isFinite(value))throw new TypeError('Execution preview contains a non-finite number');return value;}if(Array.isArray(value))return value.map(canonicalize);if(value&&typeof value==='object'){const out={};for(const key of Object.keys(value).sort())out[key]=canonicalize(value[key]);return out;}throw new TypeError('Execution preview contains a non-JSON value');}
 function sanitizeHeaders(headers){const out={};for(const [name,value] of Object.entries(headers??{})){const lower=String(name).toLowerCase();if(FORBIDDEN_HEADERS.has(lower)||lower.startsWith('proxy-')||lower.startsWith('sec-'))throw new TypeError(`Credential or transport header is not executable: ${name}`);out[name]=String(value);}return out;}
 function assertExecutableSchemaSubset(schema,path='$'){if(!schema||typeof schema!=='object'||Array.isArray(schema))throw new TypeError(`Execution schema is not enforceable at ${path}`);for(const key of Object.keys(schema))if(!EXECUTABLE_SCHEMA_KEYS.has(key))throw new TypeError(`Execution schema keyword is not supported at ${path}: ${key}`);if(Array.isArray(schema.type))throw new TypeError(`Union types are not supported for execution at ${path}`);if(schema.additionalProperties!==undefined&&typeof schema.additionalProperties!=='boolean')throw new TypeError(`Schema-valued additionalProperties is not supported for execution at ${path}`);if(schema.properties!==undefined){if(!schema.properties||typeof schema.properties!=='object'||Array.isArray(schema.properties))throw new TypeError(`Invalid properties schema at ${path}`);for(const [name,child] of Object.entries(schema.properties))assertExecutableSchemaSubset(child,`${path}.properties.${name}`);}if(schema.items!==undefined)assertExecutableSchemaSubset(schema.items,`${path}.items`);}
@@ -66,7 +68,8 @@ export function buildAuthorizedExecutionPreview(candidate,args,pageOrigin,option
   const method=String(request.method??'').toUpperCase(),sameOrigin=target.origin===page.origin,unsupportedMethod=FORBIDDEN_BROWSER_METHODS.has(method)||!method||/\s/.test(method),auth=authorizationPlan(request,options.credentialInventory,target.origin);
   const timeoutMs=boundedInt(options.timeoutMs,DEFAULT_TIMEOUT_MS,250,MAX_TIMEOUT_MS),maxResponseBytes=boundedInt(options.maxResponseBytes,DEFAULT_RESPONSE_BYTES,1,MAX_RESPONSE_BYTES);
   const headers=sanitizeHeaders(request.headers);assertRequestBudgets(target.href,headers,request.body??null);
-  const blockedReason=!sameOrigin?'same_origin_required':unsupportedMethod?'unsupported_browser_method':auth.authorizationStrategy==='unsupported-browser-managed'?'authorization_setup_required':null;
+  const brokeredInsecure=auth.credentialBindings.length>0&&!secureCredentialTransport(target);
+  const blockedReason=!sameOrigin?'same_origin_required':unsupportedMethod?'unsupported_browser_method':auth.authorizationStrategy==='unsupported-browser-managed'?'authorization_setup_required':brokeredInsecure?'secure_transport_required':null;
   return{operationName:candidate.name,method,url:target.href,headers,body:request.body??null,security:[...(request.security??[])],securityRequirements:canonicalize(request.securityRequirements??[]),securitySchemes:canonicalize(request.securitySchemes??[]),requiresAuthorization:auth.requiresAuthorization,credentialMode:auth.credentialMode,authorizationStrategy:auth.authorizationStrategy,selectedSecurityRequirement:auth.selectedSecurityRequirement,credentialBindings:auth.credentialBindings,streamingMedia:[...(request.streamingMedia??[])],sameOrigin,stateChanging:!SAFE_METHODS.has(method),redirect:'error',cache:'no-store',timeoutMs,maxResponseBytes,readyToExecute:blockedReason===null,blockedReason};
 }
 
@@ -104,6 +107,7 @@ export async function executePageApiRequest(request,runtime={}){
   }
   const secretValues=[];
   const bindings=Array.isArray(request?.credentialBindings)?request.credentialBindings:[];
+  if(bindings.length&&!secureCredentialTransport(target))throw new Error('Brokered API credentials require HTTPS; cleartext HTTP is allowed only for loopback development endpoints.');
   if(bindings.length){
     const resolveCredential=scope.resolveCredential;
     if(typeof resolveCredential!=='function')throw new Error('Session authorization is unavailable.');
