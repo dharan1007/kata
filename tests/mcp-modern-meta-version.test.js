@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handleMcpRequest, MCP_VERSION, LEGACY_MCP_VERSION} from '../lib/server/mcp.js';
+import {handleMcpRequest, MCP_VERSION} from '../lib/server/mcp.js';
 
 test('MCP 2026-07-28 reports HeaderMismatch before UnsupportedProtocolVersion when header and body disagree', async () => {
   const requested = '2027-01-01';
@@ -53,7 +53,7 @@ test('MCP 2026-07-28 returns UnsupportedProtocolVersion for an unsupported moder
   assert.equal(response.status, 400);
   assert.equal(response.body.error.code, -32022);
   assert.deepEqual(response.body.error.data, {
-    supported: [MCP_VERSION, LEGACY_MCP_VERSION],
+    supported: [MCP_VERSION],
     requested
   });
 });
