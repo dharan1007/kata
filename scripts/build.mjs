@@ -36,7 +36,7 @@ await emit('extension/service-worker.js',Buffer.from(packagedWorker));
 for(const rel of ['runtime-probe.js','api-discovery.js','api-adapter.js','api-execution.js','mcp-adapter.js'])await emit(`extension/${rel}`,await fs.readFile(path.join(root,'src',rel)));
 
 const configuredPayment=String(process.env.KATA_PAYMENT_LINK||'').trim();
-const commercialConfig={schemaVersion:1,provider:String(process.env.KATA_PAYMENT_PROVIDER||'').trim()||null,paymentUrl:validHttps(configuredPayment)?configuredPayment:null,intakeUrl:'https://tally.so/r/J9Qpxr'};
+const commercialConfig={schemaVersion:1,provider:String(process.env.KATA_PAYMENT_PROVIDER||'').trim()||null,paymentUrl:validHttps(configuredPayment)?configuredPayment:null,intakeUrl:'https://tally.so/r/xXAa0J'};
 await emit('commercial-config.json',Buffer.from(`${JSON.stringify(commercialConfig,null,2)}\n`));
 
 const integrityBytes=Buffer.from(JSON.stringify(integrity,null,2));
