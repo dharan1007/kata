@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const workflow=await readFile(new URL('../.github/workflows/deploy-production.yml',import.meta.url),'utf8');
 const releaseWorkflow=await readFile(new URL('../.github/workflows/release-gate.yml',import.meta.url),'utf8');
+const registryWorkflow=await readFile(new URL('../.github/workflows/publish-mcp-registry.yml',import.meta.url),'utf8');
 
 test('production deploy smoke validates the actual integrity manifest object shape',()=>{assert.match(workflow,/Object\.keys\(i\.assets\?\?\{\}\)\.length\s*<\s*7/);assert.doesNotMatch(workflow,/Array\.isArray\(i\.assets\)/);});
 
@@ -20,3 +21,24 @@ test('production verification allows enough time for provider deployment converg
 test('Vercel production acceptance requires provider-bound exact-SHA evidence rather than pretending a local worktree exists',()=>{assert.match(workflow,/verification\?\.providerBound!==true/);assert.match(workflow,/verification\?\.headMatches!==true/);assert.match(workflow,/verification\?\.clean!==null/);});
 
 test('release gate uses the package lock and emits supply-chain evidence',()=>{assert.match(releaseWorkflow,/npm ci --ignore-scripts/);assert.match(releaseWorkflow,/npm audit --audit-level=high/);assert.match(releaseWorkflow,/npm run verify:package/);assert.match(releaseWorkflow,/artifacts\/kata\.spdx\.json/);});
+
+test('workflow and test-only commits do not demand an impossible new Vercel source SHA',()=>{
+  assert.match(workflow,/fetch-depth:\s*2/);
+  assert.match(workflow,/\.github\/\*\|tests\/\*/);
+  assert.match(workflow,/deploy_required=false/);
+  assert.match(workflow,/needs\.classify\.outputs\.deploy_required == 'true'/);
+});
+
+test('Registry publication uses the same deployability boundary as production verification',()=>{
+  assert.match(registryWorkflow,/fetch-depth:\s*2/);
+  assert.match(registryWorkflow,/\.github\/\*\|tests\/\*/);
+  assert.match(registryWorkflow,/publish_required=false/);
+  assert.match(registryWorkflow,/needs\.classify\.outputs\.publish_required == 'true'/);
+});
+
+test('production verifier distinguishes access protection from source convergence failure',()=>{
+  assert.match(workflow,/status" = "401"/);
+  assert.match(workflow,/status" = "403"/);
+  assert.match(workflow,/blocked by an access\/protection policy/);
+  assert.match(workflow,/Do not weaken the policy/);
+});
