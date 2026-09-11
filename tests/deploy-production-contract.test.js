@@ -16,6 +16,14 @@ test('GitHub release and deploy verifier require a clean exact checkout before t
 
 test('production verification relies on Vercel Git integration instead of a long-lived deploy token',()=>{assert.doesNotMatch(workflow,/VERCEL_TOKEN/);assert.doesNotMatch(workflow,/vercel@[^\n]+(?:deploy|pull|build)/);assert.match(workflow,/Vercel Git integration/i);assert.match(workflow,/Canonical alias did not converge to expected provider-bound Vercel Git release/);});
 
+test('protected production verification uses short-lived GitHub OIDC instead of weakening Vercel protection',()=>{
+  assert.match(workflow,/id-token:\s*write/);
+  assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_URL/);
+  assert.match(workflow,/ACTIONS_ID_TOKEN_REQUEST_TOKEN/);
+  assert.match(workflow,/x-vercel-trusted-oidc-idp-token/);
+  assert.doesNotMatch(workflow,/VERCEL_AUTOMATION_BYPASS_SECRET/);
+});
+
 test('production verification allows enough time for provider deployment convergence',()=>{assert.match(workflow,/seq 1 120/);assert.match(workflow,/sleep 5/);});
 
 test('Vercel production acceptance requires provider-bound exact-SHA evidence rather than pretending a local worktree exists',()=>{assert.match(workflow,/verification\?\.providerBound!==true/);assert.match(workflow,/verification\?\.headMatches!==true/);assert.match(workflow,/verification\?\.clean!==null/);});
