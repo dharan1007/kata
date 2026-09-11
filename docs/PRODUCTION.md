@@ -94,17 +94,32 @@ Hosted metered operations reserve quota transactionally before work begins. Rese
 
 Commercial readiness must remain `blocked` unless every required external control is real and verified. Source code cannot legitimately manufacture these values.
 
-The readiness matrix covers at least:
+Vercel is KATA's authoritative production runtime. The commercial control plane is host-neutral internally and is composed for Vercel through `createVercelCommercialPlatform()`. Production customer identity uses the standards-based OIDC UserInfo boundary in `lib/platform/oidc-identity.js`: KATA accepts a bearer credential only as input to the configured HTTPS UserInfo endpoint, follows no redirects, bounds the provider response, requires a stable provider `sub`, and projects only the stable subject plus normalized email. Arbitrary `x-user-*`, role, plan, or other client-controlled headers/claims are never identity or entitlement authority.
+
+The production database boundary is `createPostgresCommercialStore()` in `lib/platform/postgres-database.js`. It accepts either a validated PostgreSQL pool or a lazy `getPool()` resolver. Lazy acquisition is the preferred integration point for Vercel/serverless runtimes because pool/client lifecycle remains owned by the selected PostgreSQL driver/integration while KATA's transaction contract obtains one client for `BEGIN`/`COMMIT`/`ROLLBACK` and releases it deterministically. The legacy Netlify-named adapter is compatibility-only and delegates to this provider-neutral implementation.
+
+Canonical SQL migrations live under `database/migrations/`; they are not owned by any hosting provider. Moving the files does not assert that production has applied them: `KATA_MIGRATIONS_CURRENT=true` remains a separate operator assertion after migration verification.
+
+Identity/database readiness is concrete rather than boolean-only. The production environment must provide:
+
+- `KATA_IDENTITY_PROVIDER=oidc`;
+- a valid HTTPS `KATA_OIDC_USERINFO_URL`;
+- `KATA_DATABASE_PROVIDER=postgres`;
+- a PostgreSQL connection URL in `KATA_DATABASE_URL` or `DATABASE_URL`;
+- the selected runtime's actual pool/UserInfo integration code when mounting protected commercial routes.
+
+The readiness endpoint reports provider names and ready/blocked state only. It must never emit the UserInfo URL, database hostname/credentials, bearer tokens, peppers, webhook secrets, or merchant secrets.
+
+The readiness matrix also covers:
 
 - source-bound release;
-- customer identity configuration;
-- commercial PostgreSQL/database configuration and current migrations;
 - key/token pepper material;
 - Razorpay live/test merchant credentials and required plan mappings;
 - webhook configuration;
 - legal/business identity and reviewed Terms/Privacy information;
 - support configuration;
 - provider-budget guardrails;
+- current database migrations;
 - release governance.
 
 If one is absent, the public core may remain usable but KATA must not advertise the commercial SaaS path as ready.
