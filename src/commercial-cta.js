@@ -1,4 +1,4 @@
-const INTAKE_URL='https://tally.so/r/J9Qpxr';
+const INTAKE_URL='https://tally.so/r/xXAa0J';
 const SERVICES_PATH='/services.html';
 
 function validHttps(value){
