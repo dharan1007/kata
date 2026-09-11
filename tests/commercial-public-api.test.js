@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pricingHandler from '../api/pricing.js';
-import readinessHandler from '../api/readiness/commercial.js';
+import readinessHandler from '../api/commercial-readiness.js';
 
 function response(){return{headers:{},statusCode:null,body:null,setHeader(name,value){this.headers[String(name).toLowerCase()]=String(value);},status(code){this.statusCode=code;return this;},json(value){this.body=value;return this;}};}
 function withEnv(patch,fn){const previous={};for(const [key,value] of Object.entries(patch)){previous[key]=process.env[key];if(value===undefined)delete process.env[key];else process.env[key]=value;}return Promise.resolve().then(fn).finally(()=>{for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});}
