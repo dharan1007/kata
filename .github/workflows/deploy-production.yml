@@ -30,49 +30,43 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Use Node.js 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-
+          cache: npm
       - name: Verify deployment candidate and exact source
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain=v1 --untracked-files=all)" || { echo "Deployment checkout is dirty before verification" >&2; git status --short; exit 1; }
-
+      - name: Install exact locked dependency graph
+        run: npm ci --ignore-scripts
       - name: Re-run complete release gate on deploy verifier
         run: npm run check
-
       - name: Wait for Vercel Git integration and verify canonical exact source
         shell: bash
         run: |
           set -euo pipefail
-          # Vercel Git integration is the deployment authority. This workflow never
-          # receives a long-lived Vercel deploy credential; it independently proves
-          # that the canonical production alias converges to the exact verified SHA.
           converged=0
           for attempt in $(seq 1 120); do
             if curl -fsS --retry 2 --retry-all-errors --retry-delay 1 "$CANONICAL_URL/release.json" > /tmp/canonical-release.json && \
-               EXPECTED_SHA="$EXPECTED_SHA" node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('/tmp/canonical-release.json','utf8')); if(r.source?.sha!==process.env.EXPECTED_SHA.toLowerCase()) process.exit(1); if(r.source?.provenance!=='source-bound') process.exit(1); if(r.source?.authority!=='vercel-git') process.exit(1); if(r.source?.repository!=='dharan1007/kata') process.exit(1); if(r.source?.ref!=='main') process.exit(1); if(r.source?.verification?.clean!==true || r.source?.verification?.headMatches!==true) process.exit(1);"; then
+               EXPECTED_SHA="$EXPECTED_SHA" node --input-type=module -e "import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync('/tmp/canonical-release.json','utf8')); if(r.source?.sha!==process.env.EXPECTED_SHA.toLowerCase()) process.exit(1); if(r.source?.provenance!=='source-bound') process.exit(1); if(r.source?.authority!=='vercel-git') process.exit(1); if(r.source?.repository!=='dharan1007/kata') process.exit(1); if(r.source?.ref!=='main') process.exit(1); if(r.source?.verification?.providerBound!==true || r.source?.verification?.headMatches!==true || r.source?.verification?.clean!==null) process.exit(1);"; then
               converged=1
               break
             fi
             sleep 5
           done
-          if [ "$converged" != 1 ]; then
-            echo "Canonical alias did not converge to expected clean source-bound Vercel Git release" >&2
-            exit 1
-          fi
-
-      - name: Verify canonical health integrity and API contract
+          if [ "$converged" != 1 ]; then echo "Canonical alias did not converge to expected provider-bound Vercel Git release" >&2; exit 1; fi
+      - name: Verify canonical health integrity APIs pricing and commercial readiness
         shell: bash
         run: |
           set -euo pipefail
           curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/api/health" > /tmp/canonical-health.json
           curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/api/capabilities" > /tmp/canonical-capabilities.json
           curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/api/openapi" > /tmp/canonical-openapi.json
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/api/pricing" > /tmp/canonical-pricing.json
+          curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/api/readiness/commercial" > /tmp/canonical-readiness.json
           curl -fsS --retry 6 --retry-all-errors --retry-delay 2 "$CANONICAL_URL/integrity.json" > /tmp/canonical-integrity.json
-          EXPECTED_SHA="$EXPECTED_SHA" node --input-type=module -e "import fs from 'node:fs'; import {createHash} from 'node:crypto'; const h=JSON.parse(fs.readFileSync('/tmp/canonical-health.json','utf8')); const c=JSON.parse(fs.readFileSync('/tmp/canonical-capabilities.json','utf8')); const o=JSON.parse(fs.readFileSync('/tmp/canonical-openapi.json','utf8')); const i=JSON.parse(fs.readFileSync('/tmp/canonical-integrity.json','utf8')); const r=JSON.parse(fs.readFileSync('/tmp/canonical-release.json','utf8')); const required=['kata_search_research','kata_plan_triage','kata_diagnose_web_interop','kata_apply_command','kata_compile_workflow','kata_execute_program','kata_preview_automation','kata_run_automation']; const tools=c.capabilities?.tools; if(h.ok!==true) throw new Error('canonical health failed'); if(!Array.isArray(tools)) throw new Error('canonical capabilities tools missing'); const names=tools.map(t=>t?.name).filter(Boolean); if(new Set(names).size!==names.length) throw new Error('canonical capabilities contain duplicate tool names'); const missing=required.filter(name=>!names.includes(name)); if(missing.length) throw new Error('canonical capabilities missing required tools: '+missing.join(', ')); if(!o.paths?.['/api/mcp']?.post) throw new Error('canonical OpenAPI MCP contract missing'); if(Object.keys(i.assets??{}).length<7) throw new Error('canonical integrity manifest incomplete'); const bytes=Buffer.from(JSON.stringify(i,null,2)); const digest=createHash('sha256').update(bytes).digest('hex'); if(r.evidence?.integrity?.sha256!==digest) throw new Error('canonical release/integrity digest mismatch'); if(r.evidence?.integrity?.bytes!==bytes.length) throw new Error('canonical release/integrity byte count mismatch'); if(r.source?.sha!==process.env.EXPECTED_SHA.toLowerCase()) throw new Error('canonical source changed during verification');"
+          EXPECTED_SHA="$EXPECTED_SHA" node --input-type=module -e "import fs from 'node:fs'; import {createHash} from 'node:crypto'; const h=JSON.parse(fs.readFileSync('/tmp/canonical-health.json','utf8')); const c=JSON.parse(fs.readFileSync('/tmp/canonical-capabilities.json','utf8')); const o=JSON.parse(fs.readFileSync('/tmp/canonical-openapi.json','utf8')); const p=JSON.parse(fs.readFileSync('/tmp/canonical-pricing.json','utf8')); const q=JSON.parse(fs.readFileSync('/tmp/canonical-readiness.json','utf8')); const i=JSON.parse(fs.readFileSync('/tmp/canonical-integrity.json','utf8')); const r=JSON.parse(fs.readFileSync('/tmp/canonical-release.json','utf8')); const required=['kata_search_research','kata_plan_triage','kata_diagnose_web_interop','kata_apply_command','kata_compile_workflow','kata_execute_program','kata_preview_automation','kata_run_automation']; const tools=c.capabilities?.tools; if(h.ok!==true) throw new Error('canonical health failed'); if(!Array.isArray(tools)) throw new Error('canonical capabilities tools missing'); const names=tools.map(t=>t?.name).filter(Boolean); if(new Set(names).size!==names.length) throw new Error('canonical capabilities contain duplicate tool names'); const missing=required.filter(name=>!names.includes(name)); if(missing.length) throw new Error('canonical capabilities missing required tools: '+missing.join(', ')); if(!o.paths?.['/api/mcp']?.post) throw new Error('canonical OpenAPI MCP contract missing'); if(!Array.isArray(p.plans)||!['free','developer','team','enterprise'].every(id=>p.plans.some(plan=>plan.id===id))) throw new Error('canonical pricing contract incomplete'); const pricingText=JSON.stringify(p); if(/KATA_RAZORPAY|keySecret|webhookSecret|plan_[A-Za-z0-9]+/.test(pricingText)) throw new Error('canonical pricing leaks provider configuration'); if(q.readiness?.sourceBound!==true || q.readiness?.releaseSha!==process.env.EXPECTED_SHA.toLowerCase() || !['ready','blocked'].includes(q.readiness?.status)) throw new Error('commercial readiness is not source-bound to canonical release'); if(Object.keys(i.assets??{}).length<7) throw new Error('canonical integrity manifest incomplete'); const bytes=Buffer.from(JSON.stringify(i,null,2)); const digest=createHash('sha256').update(bytes).digest('hex'); if(r.evidence?.integrity?.sha256!==digest) throw new Error('canonical release/integrity digest mismatch'); if(r.evidence?.integrity?.bytes!==bytes.length) throw new Error('canonical release/integrity byte count mismatch'); if(r.source?.sha!==process.env.EXPECTED_SHA.toLowerCase()) throw new Error('canonical source changed during verification');"
