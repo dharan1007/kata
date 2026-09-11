@@ -46,9 +46,11 @@ On GitHub Actions, KATA accepts source-bound provenance only when the checked-ou
 
 On Vercel, the build may not expose a normal local Git worktree. KATA therefore accepts provider-bound Vercel Git provenance only when Vercel itself supplies a valid commit SHA, repository owner/slug, and commit ref while `VERCEL=1`. Production acceptance additionally requires repository `dharan1007/kata` and ref `main`.
 
-A Vercel production candidate must not receive the canonical production alias merely because its build reached `READY`. Vercel must have a blocking Deployment Check / Promotion Requirement named exactly `KATA exact-SHA release gate` for project `prj_uDsXCo9uynyfgRGQKxVp9pVGL29y`, configured to block `deployment-alias`. The GitHub workflow `.github/workflows/deploy-production.yml` consumes Vercel's `vercel.deployment.ready` repository-dispatch event, validates that the candidate is the current `main` SHA, re-runs KATA's complete release qualification from that exact SHA, verifies the candidate deployment URL and provider-bound `/release.json`, and reports the final status back through Vercel's repository-dispatch status action. A failed, cancelled, stale, malformed, or mismatched candidate must leave the previous production alias untouched.
+Production ordering is enforced before Vercel builds `main`. `vercel.json` commits `ignoreCommand: "node scripts/vercel-prebuild-gate.mjs"`. For non-main previews the gate immediately permits the build. For `main`, it requires Vercel's production target plus the exact `dharan1007/kata` Git identity and a valid 40-character candidate SHA. It then verifies that GitHub's current `main` still points to that SHA and polls the public GitHub Actions API for exact-SHA `push` runs of both `KATA Release Gate` and `CodeQL`. Only when both are completed successfully, and `main` still points to the candidate SHA, does the ignored-build command return Vercel's "proceed" exit code.
 
-Do not treat the repository-side workflow alone as proof that this control is active. The Vercel project-side blocking check must be installed and observed holding a real production candidate before issue #148 can be closed or release governance can be considered complete. The check is intentionally tokenless from KATA's perspective: GitHub receives the Vercel integration dispatch and reports a commit status; KATA does not store a long-lived Vercel deployment token for promotion.
+The gate is deliberately fail closed. A failed/cancelled required workflow, stale SHA, malformed deployment identity, GitHub API outage or rate-limit response, or exhaustion of the bounded 20-attempt / 30-second polling window makes the ignored-build command return Vercel's "skip" exit code. Vercel therefore cancels/skips that Git deployment before the application build and leaves the existing production deployment in service. No Vercel deploy token, GitHub token, or project-side Deployment Check is required for this ordering control.
+
+After a permitted build reaches production, `.github/workflows/deploy-production.yml` remains an independent post-deploy verifier: it rebuilds from the exact release-gated SHA and accepts canonical production only when Vercel Git provenance, release/integrity evidence, health, capabilities, OpenAPI, pricing, and commercial readiness all match that SHA. MCP Registry publication remains downstream of this verified production workflow.
 
 ## Supply-chain release gate
 
@@ -140,9 +142,18 @@ State-changing OpenAPI/MCP execution is preview-bound and guarded against stale 
 
 ## Deployment verification
 
-Before alias assignment, the blocking Vercel Deployment Check accepts a candidate only when its exact deployment URL reports:
+Before a production `main` build begins, the committed Vercel pre-build gate requires:
 
-- the exact current `main` source SHA supplied by the Vercel integration event;
+- Vercel production target and repository identity `dharan1007/kata`;
+- a valid candidate SHA that is still the current GitHub `main` SHA;
+- exact-SHA `push` run success for `KATA Release Gate`;
+- exact-SHA `push` run success for `CodeQL`.
+
+Failure, cancellation, timeout, stale source, malformed Vercel Git metadata, or GitHub verification uncertainty skips the deployment instead of interpreting uncertainty as approval.
+
+After Vercel builds and aliases an approved SHA, the post-deploy verifier requires canonical production to report:
+
+- the exact expected source SHA;
 - `source-bound` Vercel Git provenance for `dharan1007/kata` on `main`;
 - provider-bound exact-SHA evidence;
 - health `ok`;
@@ -151,11 +162,9 @@ Before alias assignment, the blocking Vercel Deployment Check accepts a candidat
 - complete safe pricing metadata;
 - source-bound commercial readiness evidence (`ready` or explicitly `blocked`);
 - an integrity manifest with the required static assets;
-- a `release.json` digest/byte binding that matches the candidate integrity bytes.
+- a `release.json` digest/byte binding that matches the canonical integrity bytes.
 
-The same workflow independently checks out the exact candidate SHA, requires a clean worktree, installs the locked dependency graph, rejects high-severity dependency advisories, runs the complete KATA check suite, verifies the installable package surface, emits an SPDX SBOM, and validates local source/integrity evidence. The deployment URL and the locally verified source must agree on the exact SHA before Vercel receives a passing status.
-
-After promotion, canonical production should report the same release SHA and health contract. Any divergence is an incident; do not reinterpret a different canonical SHA as eventual success for the candidate that was checked.
+A production SHA is not considered accepted merely because Vercel reports `READY`.
 
 ## Rollback
 
