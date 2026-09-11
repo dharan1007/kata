@@ -100,11 +100,30 @@ function parseOpenApiDocument(document,url){
 }
 function linkTargets(value,base){if(value===undefined||value===null)return[];const items=Array.isArray(value)?value:[value],out=[];for(const item of items){if(item===undefined||item===null)continue;const raw=typeof item==='string'?item:item?.href;const url=safeHttpUrl(raw,base);if(url)out.push(url.href);}return out;}
 function parseCatalog(document,catalogUrl){const descriptionUrls=[],apiEndpoints=[],nestedCatalogs=[];for(const entry of Array.isArray(document?.linkset)?document.linkset:[]){const anchor=safeHttpUrl(entry?.anchor,catalogUrl)?.href??catalogUrl;descriptionUrls.push(...linkTargets(entry?.['service-desc'],anchor));apiEndpoints.push(...linkTargets(entry?.item,anchor));nestedCatalogs.push(...linkTargets(entry?.['api-catalog'],anchor));}return{descriptionUrls:unique(descriptionUrls),apiEndpoints:unique(apiEndpoints),nestedCatalogs:unique(nestedCatalogs)};}
+async function readBoundedText(response,signal){
+  const reader=response?.body?.getReader?.();
+  if(!reader){const text=await response.text(),bytes=new TextEncoder().encode(text).byteLength;return bytes>MAX_DESCRIPTION_BYTES?{ok:false,status:'too_large',bytes}:{ok:true,text,bytes};}
+  const decoder=new TextDecoder();let bytes=0,text='';
+  try{
+    while(true){
+      aborted(signal);
+      const {value,done}=await reader.read();
+      aborted(signal);
+      if(done)break;
+      const chunk=value instanceof Uint8Array?value:new Uint8Array(value);
+      bytes+=chunk.byteLength;
+      if(bytes>MAX_DESCRIPTION_BYTES){try{await reader.cancel('response too large');}catch{}return{ok:false,status:'too_large',bytes};}
+      text+=decoder.decode(chunk,{stream:true});
+    }
+    text+=decoder.decode();
+    return{ok:true,text,bytes};
+  }finally{try{reader.releaseLock();}catch{}}
+}
 async function fetchText(url,origin,fetchFn,signal,accept){
   const sameOrigin=url.origin===origin;let response;try{response=await fetchFn(url.href,{method:'GET',mode:'cors',credentials:sameOrigin?'same-origin':'omit',redirect:'follow',headers:{Accept:accept},signal});}catch(error){aborted(signal,error);return{ok:false,status:'fetch_blocked_or_failed',error:error instanceof Error?error.message:String(error)};}
   const finalUrl=safeHttpUrl(response?.url||url.href,url.href)?.href??url.href;if(!response?.ok)return{ok:false,status:'http_error',httpStatus:response?.status??0,finalUrl};
   const declaredLength=Number(response.headers?.get?.('content-length'));if(Number.isFinite(declaredLength)&&declaredLength>MAX_DESCRIPTION_BYTES)return{ok:false,status:'too_large',bytes:declaredLength,finalUrl};
-  let text;try{text=await response.text();}catch(error){aborted(signal,error);return{ok:false,status:'read_failed',error:error instanceof Error?error.message:String(error),finalUrl};}aborted(signal);if(text.length>MAX_DESCRIPTION_BYTES)return{ok:false,status:'too_large',bytes:text.length,finalUrl};return{ok:true,text,contentType:response.headers?.get?.('content-type')??'',finalUrl,httpStatus:response.status};
+  let read;try{read=await readBoundedText(response,signal);}catch(error){aborted(signal,error);return{ok:false,status:'read_failed',error:error instanceof Error?error.message:String(error),finalUrl};}aborted(signal);if(!read.ok)return{...read,finalUrl};return{ok:true,text:read.text,contentType:response.headers?.get?.('content-type')??'',finalUrl,httpStatus:response.status};
 }
 
 export async function discoverBrowserApis(options={},runtime={}){
