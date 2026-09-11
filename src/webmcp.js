@@ -62,7 +62,7 @@ function browserTools(runtime){
 export function createWebMcpRegistry(runtime,onStatus=()=>{}){
   let controller=null;
   async function refresh(){
-    controller?.abort();controller=new AbortController();const mc=getModelContext(runtime);if(!mc?.registerTool){onStatus({supported:false,active:[],collisions:[],error:null});return;}
+    controller?.abort();controller=new AbortController();const mc=getModelContext(runtime);if(!mc?.registerTool){onStatus({supported:false,active:[],collisions:[],rejected:[],error:null});return;}
     const tools=[...canonicalTools(runtime),...browserTools(runtime)];
     const reserved=new Set(tools.map(x=>x.name)),collisions=[];
     for(const p of runtime.listPrograms()){
@@ -72,7 +72,14 @@ export function createWebMcpRegistry(runtime,onStatus=()=>{}){
     }
     collisions.sort();
     const exposedTo=exposureConfig(runtime),registrationOptions={signal:controller.signal,...(exposedTo.length?{exposedTo}:{})};
-    const active=[];try{for(const tool of tools){await mc.registerTool(tool,registrationOptions);active.push(tool.name);}onStatus({supported:true,active,collisions,error:null,...(exposedTo.length?{exposedTo}:{})});}catch(error){controller.abort();onStatus({supported:true,active:[],collisions,error:error instanceof Error?error.message:String(error),...(exposedTo.length?{exposedTo}:{})});}
+    const active=[],rejected=[];
+    for(const tool of tools){
+      try{await mc.registerTool(tool,registrationOptions);active.push(tool.name);}
+      catch(error){rejected.push({name:tool.name,error:error instanceof Error?error.message:String(error)});}
+    }
+    const error=active.length===0&&rejected.length?rejected[0].error:null;
+    if(error)controller.abort();
+    onStatus({supported:true,active,collisions,rejected,error,...(exposedTo.length?{exposedTo}:{})});
   }
   return{refresh,dispose(){controller?.abort();controller=null;}};
 }

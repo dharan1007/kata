@@ -50,3 +50,27 @@ test('WebMCP cross-origin exposure accepts potentially trustworthy local develop
  }
  registry.dispose();
 });
+
+test('WebMCP isolates a rejected tool instead of unregistering healthy tools in the same refresh',async()=>{
+ const calls=[];const statuses=[];
+ const mc={async registerTool(tool,{signal}){calls.push({name:tool.name,signal});if(tool.name==='stale_bad')throw new Error('NATIVE_TOOL_REJECTED');}};
+ const runtime={
+  modelContext:mc,
+  search:async()=>({}),summary:()=>({}),listAutomations:()=>[],runAutomation:async()=>({}),
+  listPrograms:()=>[
+   {name:'stale_bad',description:'stale persisted tool',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+   {name:'learned_good',description:'healthy learned tool',inputSchema:{type:'object',properties:{},additionalProperties:false}}
+  ],
+  executeProgram:async()=>({})
+ };
+ const registry=createWebMcpRegistry(runtime,status=>statuses.push(status));
+ await registry.refresh();
+ const status=statuses.at(-1);
+ assert.equal(calls.find(x=>x.name==='kata_search_research').signal.aborted,false);
+ assert.equal(calls.some(x=>x.name==='learned_good'),true);
+ assert.ok(status.active.includes('kata_search_research'));
+ assert.ok(status.active.includes('learned_good'));
+ assert.deepEqual(status.rejected,[{name:'stale_bad',error:'NATIVE_TOOL_REJECTED'}]);
+ assert.equal(status.error,null);
+ registry.dispose();
+});
