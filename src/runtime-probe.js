@@ -92,7 +92,7 @@ export function inspectBrowserRuntime(runtime={}){
       toolsPermission:toolsPermission(doc),
       originExposure:frame==='cross-origin'?'unknown':'not-required',
       crossOriginRequest:frame==='cross-origin'?'unknown':'not-required',
-      api:'unknown',auth:'unknown',authScope:'unknown',cors:'unknown',cspConnect:'unknown',rateLimit:'unknown',rateLimitScope:'unknown',botProtection:'unknown',botProtectionScope:'unknown',terms:'unknown',termsScope:'unknown',userAuthorizedBrowserFlow:false,serverSideApiAvailable:false
+      api:'unknown',auth:'unknown',authScope:'unknown',cors:'unknown',cspConnect:'unknown',rateLimit:'unknown',rateLimitScope:'unknown',botProtection:'unknown',botProtectionScope:'unknown',terms:'unknown',termsScope:'unknown',userAuthorizedBrowserFlow:false,serverSideApiAvailable:'unknown'
     };
   }
 

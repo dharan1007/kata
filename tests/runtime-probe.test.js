@@ -32,6 +32,7 @@ test('runtime probe derives directly observable browser evidence and leaves serv
   assert.equal(result.environment.webMcpApi,'available');
   assert.equal(result.environment.toolsPermission,'allowed');
   assert.equal(result.environment.api,'documented');
+  assert.equal(result.environment.serverSideApiAvailable,'unknown');
   assert.equal(result.environment.auth,'unknown');
   assert.equal(result.environment.cors,'unknown');
   assert.equal(result.environment.botProtection,'unknown');
