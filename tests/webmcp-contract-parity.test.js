@@ -56,6 +56,7 @@ test('browser-owned inspection, API discovery and stateful actions use explicit 
   const tools=byName(registered);
   for(const name of ['kata_browser_inspect_runtime','kata_browser_discover_api','kata_browser_search_and_load_research','kata_browser_workspace_summary','kata_browser_list_automations','kata_browser_run_saved_automation','kata_browser_list_learned_tools'])assert.ok(tools.has(name),`missing ${name}`);
   assert.equal(tools.get('kata_browser_inspect_runtime').annotations.readOnlyHint,true);
+  assert.equal(tools.get('kata_browser_inspect_runtime').annotations.untrustedContentHint,true);
   assert.equal(tools.get('kata_browser_discover_api').annotations.readOnlyHint,true);
   assert.deepEqual(tools.get('kata_browser_discover_api').inputSchema.required,[]);
   const controller=new AbortController();
