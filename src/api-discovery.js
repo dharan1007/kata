@@ -5,6 +5,10 @@ const MAX_OPERATIONS=250;
 const MAX_SCHEMA_REF_DEPTH=8;
 const MAX_SERVERS=50;
 const MAX_SERVER_VARIABLES=50;
+const MAX_SERVER_URL_LENGTH=8192;
+const MAX_SERVER_VARIABLE_NAME_LENGTH=128;
+const MAX_SERVER_VALUE_LENGTH=1024;
+const MAX_SERVER_ENUM_VALUES=50;
 
 function safeHttpUrl(raw,base){
   if(raw===undefined||raw===null||raw==='')return null;
@@ -83,11 +87,17 @@ function securitySchemeRecords(document){
 function serverRecords(servers){
   const out=[];
   for(const item of Array.isArray(servers)?servers:[]){
-    if(!item||typeof item!=='object'||Array.isArray(item)||typeof item.url!=='string')continue;
+    if(!item||typeof item!=='object'||Array.isArray(item)||typeof item.url!=='string'||item.url.length>MAX_SERVER_URL_LENGTH)continue;
     const variables={};
     for(const [name,variable] of Object.entries(item.variables??{}).slice(0,MAX_SERVER_VARIABLES)){
-      if(!name||!variable||typeof variable!=='object'||Array.isArray(variable))continue;
-      variables[name]={...(typeof variable.default==='string'?{default:variable.default}:{}),...(Array.isArray(variable.enum)?{enum:variable.enum.filter(value=>typeof value==='string').slice(0,50)}:{})};
+      if(!name||name.length>MAX_SERVER_VARIABLE_NAME_LENGTH||!variable||typeof variable!=='object'||Array.isArray(variable))continue;
+      const record={};
+      if(typeof variable.default==='string'&&variable.default.length<=MAX_SERVER_VALUE_LENGTH)record.default=variable.default;
+      if(Array.isArray(variable.enum)){
+        if(variable.enum.length>MAX_SERVER_ENUM_VALUES||variable.enum.some(value=>typeof value!=='string'||value.length>MAX_SERVER_VALUE_LENGTH))continue;
+        record.enum=[...variable.enum];
+      }
+      Object.defineProperty(variables,name,{value:record,enumerable:true,writable:true,configurable:true});
     }
     out.push({url:item.url,variables});
     if(out.length>=MAX_SERVERS)break;
