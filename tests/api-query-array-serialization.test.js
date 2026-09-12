@@ -19,7 +19,7 @@ test('serializes supported OpenAPI query arrays instead of rejecting executable 
   const cases=[
     ['form',true,'https://api.example.test/items?color=blue&color=black&color=brown'],
     ['form',false,'https://api.example.test/items?color=blue%2Cblack%2Cbrown'],
-    ['spaceDelimited',false,'https://api.example.test/items?color=blue+black+brown'],
+    ['spaceDelimited',false,'https://api.example.test/items?color=blue%20black%20brown'],
     ['pipeDelimited',false,'https://api.example.test/items?color=blue%7Cblack%7Cbrown']
   ];
   for(const [style,explode,expected] of cases){
