@@ -43,7 +43,12 @@ function resolveSchema(schema,document,depth=0,seen=new Set()){
   if(typeof schema.$ref==='string'){
     const key=localRef(schema.$ref,'#/components/schemas/');if(!key||seen.has(key))return{schema:null,unresolved:true};
     const target=document.components?.schemas?.[key];if(!target||typeof target!=='object')return{schema:null,unresolved:true};
-    const next=new Set(seen);next.add(key);return resolveSchema(target,document,depth+1,next);
+    const next=new Set(seen);next.add(key);const resolvedTarget=resolveSchema(target,document,depth+1,next);
+    const supportsRefSiblings=/^3\.(?:1|2)(?:\.|$)/.test(String(document.openapi??'')),hasSiblings=Object.keys(schema).some(name=>name!=='$ref');
+    if(!supportsRefSiblings||!hasSiblings||resolvedTarget.unresolved)return resolvedTarget;
+    const siblingSchema=structuredClone(schema);delete siblingSchema.$ref;const resolvedSiblings=resolveSchema(siblingSchema,document,depth+1,next);
+    if(resolvedSiblings.unresolved)return{schema:null,unresolved:true};
+    return{schema:{allOf:[resolvedTarget.schema,resolvedSiblings.schema]},unresolved:false};
   }
   const out={};let unresolved=false;
   for(const [key,value] of Object.entries(schema)){
