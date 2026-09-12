@@ -83,7 +83,9 @@ function operationRecord(method,path,pathItem,operation,topSecurityRequirements,
   const securityRequirements=Object.hasOwn(operation,'security')?normalizeSecurityRequirements(operation.security):topSecurityRequirements;
   const security=securityNames(securityRequirements);
   const operationSecuritySchemes=security.map(name=>securitySchemeMap.get(name)??{name,type:'unresolved',in:null,parameterName:null,scheme:null,bearerFormat:null,openIdConnectUrl:null,oauthFlows:[]});
-  return{method,path,operationId:typeof operation.operationId==='string'?operation.operationId:null,summary:typeof operation.summary==='string'?operation.summary:null,tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],security,securityRequirements,securitySchemes:operationSecuritySchemes,streamingMedia:streamingMedia(operation),parameters:parameters.parameters,requestBody:body.requestBody,hasUnresolvedRequiredInputs:Boolean(parameters.unresolvedRequired||body.unresolvedRequired)};
+  const selectedServers=Object.hasOwn(operation,'servers')?operation.servers:Object.hasOwn(pathItem,'servers')?pathItem.servers:document.servers;
+  const servers=(Array.isArray(selectedServers)?selectedServers:[]).map(item=>item?.url).filter(value=>typeof value==='string').slice(0,50);
+  return{method,path,operationId:typeof operation.operationId==='string'?operation.operationId:null,summary:typeof operation.summary==='string'?operation.summary:null,tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],servers,security,securityRequirements,securitySchemes:operationSecuritySchemes,streamingMedia:streamingMedia(operation),parameters:parameters.parameters,requestBody:body.requestBody,hasUnresolvedRequiredInputs:Boolean(parameters.unresolvedRequired||body.unresolvedRequired)};
 }
 function parseOpenApiDocument(document,url){
   if(!document||typeof document!=='object'||Array.isArray(document))return{ok:false,reason:'invalid_document'};
