@@ -1,4 +1,4 @@
-const HTTP_METHODS=['get','put','post','delete','options','head','patch','trace','query'];
+const BASE_HTTP_METHODS=['get','put','post','delete','options','head','patch','trace'];
 const STREAMING_MEDIA=new Set(['text/event-stream','application/jsonl','application/json-seq']);
 const MAX_DESCRIPTION_BYTES=2*1024*1024;
 const MAX_OPERATIONS=250;
@@ -89,11 +89,12 @@ function parseOpenApiDocument(document,url){
   if(!document||typeof document!=='object'||Array.isArray(document))return{ok:false,reason:'invalid_document'};
   const version=typeof document.openapi==='string'?document.openapi:'';if(!/^3\.(?:0|1|2)(?:\.|$)/.test(version))return{ok:false,reason:'unsupported_openapi_version',version:version||null};
   const securitySchemes=securitySchemeRecords(document),securitySchemeMap=new Map(securitySchemes.map(scheme=>[scheme.name,scheme]));
-  const topSecurityRequirements=normalizeSecurityRequirements(document.security),topSecurity=securityNames(topSecurityRequirements),operations=[],oas32=/^3\.2(?:\.|$)/.test(version);
+  const topSecurityRequirements=normalizeSecurityRequirements(document.security),topSecurity=securityNames(topSecurityRequirements),operations=[],oas32=/^3\.2(?:\.|$)/.test(version),standardMethods=oas32?[...BASE_HTTP_METHODS,'query']:BASE_HTTP_METHODS;
   outer:for(const [path,pathItem] of Object.entries(document.paths??{})){
     if(!pathItem||typeof pathItem!=='object')continue;
-    for(const method of HTTP_METHODS){const operation=pathItem[method];if(!operation||typeof operation!=='object')continue;operations.push(operationRecord(method.toUpperCase(),path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
-    if(oas32&&pathItem.additionalOperations&&typeof pathItem.additionalOperations==='object'&&!Array.isArray(pathItem.additionalOperations))for(const [method,operation] of Object.entries(pathItem.additionalOperations)){if(!method||!operation||typeof operation!=='object'||Array.isArray(operation)||HTTP_METHODS.includes(method.toLowerCase()))continue;operations.push(operationRecord(method,path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
+    for(const method of standardMethods){const operation=pathItem[method];if(!operation||typeof operation!=='object'||Array.isArray(operation))continue;operations.push(operationRecord(method.toUpperCase(),path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
+    const additional=oas32?pathItem.additionalOperations:pathItem['x-oai-additionalOperations'];
+    if(additional&&typeof additional==='object'&&!Array.isArray(additional))for(const [method,operation] of Object.entries(additional)){if(!method||!operation||typeof operation!=='object'||Array.isArray(operation)||standardMethods.includes(method.toLowerCase()))continue;operations.push(operationRecord(method,path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
   }
   const servers=(Array.isArray(document.servers)?document.servers:[]).map(x=>x?.url).filter(x=>typeof x==='string').slice(0,50);
   return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,security:topSecurity,securityRequirements:topSecurityRequirements,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS},operations,securitySchemes};
