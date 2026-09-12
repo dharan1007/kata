@@ -15,6 +15,16 @@ function secureOrigins(values){
  const out=[];for(const raw of Array.isArray(values)?values:[]){try{const url=new URL(String(raw));if(!isPotentiallyTrustworthyOrigin(url)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)continue;const origin=url.origin;if(origin!=='null'&&!out.includes(origin))out.push(origin);}catch{}}
  return out;
 }
+function requestedOrigins(values){
+ if(!Array.isArray(values)||values.length<1||values.length>8)throw new Error('WEBMCP_INVALID_ORIGINS');
+ const out=[];
+ for(const raw of values){
+  let url;try{url=new URL(String(raw));}catch{throw new Error('WEBMCP_INVALID_ORIGIN');}
+  if(!isPotentiallyTrustworthyOrigin(url)||url.username||url.password||url.pathname!=='/'||url.search||url.hash||url.origin==='null')throw new Error('WEBMCP_INVALID_ORIGIN');
+  if(!out.includes(url.origin))out.push(url.origin);
+ }
+ return out;
+}
 function exposureConfig(runtime){
  const configured=runtime.webMcpExposedTo??globalThis.document?.querySelector?.('meta[name="kata-webmcp-exposed-to"]')?.content?.split(',').map(x=>x.trim()).filter(Boolean)??[];
  return secureOrigins(configured);
@@ -23,7 +33,26 @@ function browserAnnotations(annotations={}){
  const out={};
  if('readOnlyHint'in annotations)out.readOnlyHint=Boolean(annotations.readOnlyHint);
  if('untrustedContentHint'in annotations)out.untrustedContentHint=Boolean(annotations.untrustedContentHint);
+ if('consequentialHint'in annotations)out.consequentialHint=Boolean(annotations.consequentialHint);
  return out;
+}
+function boundedText(value,max){const text=String(value??'');return text.length>max?`${text.slice(0,max-1)}…`:text;}
+function projectedRegisteredTool(tool){
+ return{
+  name:boundedText(tool?.name,128),
+  title:tool?.title==null?null:boundedText(tool.title,160),
+  description:boundedText(tool?.description,500),
+  origin:boundedText(tool?.origin,2048),
+  annotations:browserAnnotations(tool?.annotations??{})
+ };
+}
+async function discoverWebMcpTools(runtime,options={},context={}){
+ context.signal?.throwIfAborted();
+ const mc=getModelContext(runtime);if(typeof mc?.getTools!=='function')throw new Error('WEBMCP_GET_TOOLS_UNAVAILABLE');
+ const fromOrigins=requestedOrigins(options.fromOrigins),maxTools=Number.isInteger(options.maxTools)?Math.max(1,Math.min(50,options.maxTools)):25;
+ const discovered=await mc.getTools({fromOrigins});context.signal?.throwIfAborted();
+ const tools=Array.isArray(discovered)?discovered:[];
+ return{fromOrigins,tools:tools.slice(0,maxTools).map(projectedRegisteredTool),truncated:tools.length>maxTools,totalObserved:tools.length};
 }
 async function invokeCanonical(runtime,name,args,signal){
  if(typeof runtime.invokeCanonical==='function')return runtime.invokeCanonical(name,args,{signal});
@@ -50,6 +79,7 @@ function browserTools(runtime){
  const searchSchema=toolDefinitions.find(x=>x.name==='kata_search_research').inputSchema;
  return[
   {name:'kata_browser_inspect_runtime',description:'Inspect the current host document for directly observable WebMCP, browser policy, frame, framework, DOM topology and declared API evidence without probing protected resources or guessing security state.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>browserRuntimeSnapshot()},
+  {name:'kata_browser_discover_webmcp_tools',description:'Discover WebMCP tools from explicitly requested secure descendant origins using the browser-authorized getTools({fromOrigins}) path. This read-only operation does not execute discovered tools and cannot bypass Permissions Policy or exposedTo origin gating.',inputSchema:{type:'object',properties:{fromOrigins:{type:'array',minItems:1,maxItems:8,items:{type:'string',minLength:1,maxLength:2048}},maxTools:{type:'integer',minimum:1,maximum:50}},required:['fromOrigins'],additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:(options={},context={})=>discoverWebMcpTools(runtime,options,context)},
   {name:'kata_browser_discover_api',description:'Discover and inventory standards-declared OpenAPI descriptions from the current document and optional current-origin RFC 9727 API catalog. This read-only tool never invokes API operations and preserves normal browser CORS, CSP, authentication and credential boundaries.',inputSchema:{type:'object',properties:{includeWellKnownCatalog:{type:'boolean'},maxDescriptions:{type:'integer',minimum:1,maximum:5}},required:[],additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:(options={},context={})=>discoverCurrentDocument(options,context)},
   {name:'kata_browser_compile_api_tools',description:'Compile standards-discovered OpenAPI operations into local preview-only agent tool contracts. Resolves bounded local component references, excludes credential arguments, never fetches external references, and never executes target API operations.',inputSchema:{type:'object',properties:{includeWellKnownCatalog:{type:'boolean'},maxDescriptions:{type:'integer',minimum:1,maximum:5},maxTools:{type:'integer',minimum:1,maximum:100}},required:[],additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async(options={},context={})=>compileOpenApiCandidates(await discoverCurrentDocument(options,context),{maxTools:options.maxTools??50})},
   {name:'kata_browser_search_and_load_research',description:'Search live OpenAlex research and load the results into this browser-owned KATA workspace.',inputSchema:structuredClone(searchSchema),annotations:{readOnlyHint:false,untrustedContentHint:true},execute:({query,limit=8},context={})=>runtime.search(query,limit,'agent',{signal:context.signal})},
