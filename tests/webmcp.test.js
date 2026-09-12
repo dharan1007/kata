@@ -9,6 +9,18 @@ test('WebMCP registers document.modelContext tools with abortable generations an
  const r=createWebMcpRegistry(runtime);await r.refresh();assert.ok(calls.length>=15);const firstSignal=calls[0].signal;const learned=calls.find(x=>x.tool.name==='learned_x').tool;assert.deepEqual(await learned.execute({workId:'W1'}),{name:'learned_x',input:{workId:'W1'}});await r.refresh();assert.equal(firstSignal.aborted,true);r.dispose();assert.equal(calls.at(-1).signal.aborted,true);
 });
 
+test('WebMCP marks external and user-authored payloads as untrusted without overclaiming deterministic diagnostics',async()=>{
+ const registered=[];const mc={async registerTool(tool){registered.push(tool);}};
+ const runtime={modelContext:mc,search:async()=>({}),summary:()=>({}),listAutomations:()=>[{name:'user-authored automation',description:'arbitrary user text'}],runAutomation:async()=>({}),listPrograms:()=>[],executeProgram:async()=>({})};
+ const registry=createWebMcpRegistry(runtime);await registry.refresh();
+ const byName=name=>registered.find(tool=>tool.name===name);
+ for(const name of ['kata_search_research','kata_plan_triage','kata_apply_command','kata_compile_workflow','kata_execute_program','kata_preview_automation','kata_run_automation','kata_browser_list_automations']){
+  assert.equal(byName(name).annotations.untrustedContentHint,true,`${name} must signal untrusted output`);
+ }
+ assert.notEqual(byName('kata_diagnose_web_interop').annotations.untrustedContentHint,true);
+ registry.dispose();
+});
+
 test('WebMCP forwards invocation AbortSignal to canonical, browser-state and learned operations',async()=>{
  const registered=[];const mc={async registerTool(tool){registered.push(tool);}};const seen={};
  const runtime={
