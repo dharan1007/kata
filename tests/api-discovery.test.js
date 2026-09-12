@@ -52,6 +52,25 @@ test('inventories OpenAPI 3.2 additionalOperations instead of silently dropping 
   assert.deepEqual(operation.security,['apiKey']);
 });
 
+test('treats QUERY as a standard Path Item operation only for OpenAPI 3.2',async()=>{
+  const modern=structuredClone(OPENAPI);
+  modern.paths['/search']={query:{operationId:'queryItems',responses:{'200':{content:{'application/json':{}}}}}};
+  const modernResult=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async()=>response({body:JSON.stringify(modern)})});
+  assert.equal(modernResult.operations.find(x=>x.operationId==='queryItems')?.method,'QUERY');
+
+  const legacy=structuredClone(modern);legacy.openapi='3.1.1';
+  const legacyResult=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async()=>response({body:JSON.stringify(legacy)})});
+  assert.equal(legacyResult.operations.some(x=>x.operationId==='queryItems'),false,'OAS 3.1 must not treat a raw query field as a standard operation');
+});
+
+test('supports the registered x-oai-additionalOperations compatibility extension before OpenAPI 3.2',async()=>{
+  const document=structuredClone(OPENAPI);document.openapi='3.1.1';
+  document.paths['/search']={'x-oai-additionalOperations':{QUERY:{operationId:'queryItems',responses:{'200':{content:{'application/json':{}}}}},POLL:{operationId:'pollItems',responses:{'200':{content:{'application/json':{}}}}}}};
+  const result=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async()=>response({body:JSON.stringify(document)})});
+  assert.equal(result.operations.find(x=>x.operationId==='queryItems')?.method,'QUERY');
+  assert.equal(result.operations.find(x=>x.operationId==='pollItems')?.method,'POLL');
+});
+
 test('uses omitted credentials for cross-origin descriptions and reports browser fetch failures without bypassing them',async()=>{
   const calls=[];
   const fetch=async(url,options)=>{calls.push({url:String(url),options});throw new TypeError('Failed to fetch');};
