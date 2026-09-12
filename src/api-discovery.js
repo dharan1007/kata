@@ -3,6 +3,7 @@ const STREAMING_MEDIA=new Set(['text/event-stream','application/jsonl','applicat
 const MAX_DESCRIPTION_BYTES=2*1024*1024;
 const MAX_OPERATIONS=250;
 const MAX_SCHEMA_REF_DEPTH=8;
+const MAX_PATH_ITEM_REF_DEPTH=8;
 const MAX_SERVERS=50;
 const MAX_SERVER_VARIABLES=50;
 const MAX_SERVER_URL_LENGTH=8192;
@@ -57,6 +58,15 @@ function resolveSchema(schema,document,depth=0,seen=new Set()){
   }
   const required=Array.isArray(out.required)?out.required.filter(x=>typeof x==='string'):[];if(required.length&&out.properties)for(const name of required)if(!Object.hasOwn(out.properties,name))unresolved=true;
   return{schema:out,unresolved};
+}
+function resolvePathItem(pathItem,document,depth=0,seen=new Set()){
+  if(!pathItem||typeof pathItem!=='object'||Array.isArray(pathItem))return null;
+  if(typeof pathItem.$ref!=='string')return pathItem;
+  if(depth>MAX_PATH_ITEM_REF_DEPTH)return null;
+  if(Object.keys(pathItem).some(key=>key!=='$ref'&&!key.startsWith('x-')))return null;
+  const key=localRef(pathItem.$ref,'#/components/pathItems/');if(!key||seen.has(key))return null;
+  const target=document.components?.pathItems?.[key];if(!target||typeof target!=='object'||Array.isArray(target))return null;
+  const next=new Set(seen);next.add(key);return resolvePathItem(target,document,depth+1,next);
 }
 function resolveParameter(parameter,document){
   let source=parameter;
@@ -117,15 +127,15 @@ function parseOpenApiDocument(document,url){
   if(!document||typeof document!=='object'||Array.isArray(document))return{ok:false,reason:'invalid_document'};
   const version=typeof document.openapi==='string'?document.openapi:'';if(!/^3\.(?:0|1|2)(?:\.|$)/.test(version))return{ok:false,reason:'unsupported_openapi_version',version:version||null};
   const securitySchemes=securitySchemeRecords(document),securitySchemeMap=new Map(securitySchemes.map(scheme=>[scheme.name,scheme]));
-  const topSecurityRequirements=normalizeSecurityRequirements(document.security),topSecurity=securityNames(topSecurityRequirements),operations=[],oas32=/^3\.2(?:\.|$)/.test(version),standardMethods=oas32?[...BASE_HTTP_METHODS,'query']:BASE_HTTP_METHODS;
-  outer:for(const [path,pathItem] of Object.entries(document.paths??{})){
-    if(!pathItem||typeof pathItem!=='object')continue;
+  const topSecurityRequirements=normalizeSecurityRequirements(document.security),topSecurity=securityNames(topSecurityRequirements),operations=[],oas32=/^3\.2(?:\.|$)/.test(version),supportsComponentPathItems=!/^3\.0(?:\.|$)/.test(version),standardMethods=oas32?[...BASE_HTTP_METHODS,'query']:BASE_HTTP_METHODS;let unresolvedPathItemCount=0;
+  outer:for(const [path,rawPathItem] of Object.entries(document.paths??{})){
+    const pathItem=typeof rawPathItem?.$ref==='string'&&!supportsComponentPathItems?null:resolvePathItem(rawPathItem,document);if(!pathItem){unresolvedPathItemCount+=1;continue;}
     for(const method of standardMethods){const operation=pathItem[method];if(!operation||typeof operation!=='object'||Array.isArray(operation))continue;operations.push(operationRecord(method.toUpperCase(),path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
     const additional=oas32?pathItem.additionalOperations:pathItem['x-oai-additionalOperations'];
     if(additional&&typeof additional==='object'&&!Array.isArray(additional))for(const [method,operation] of Object.entries(additional)){if(!method||!operation||typeof operation!=='object'||Array.isArray(operation)||standardMethods.includes(method.toLowerCase()))continue;operations.push(operationRecord(method,path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
   }
   const serverDefinitions=serverRecords(document.servers),servers=serverDefinitions.map(item=>item.url);
-  return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,serverDefinitions,security:topSecurity,securityRequirements:topSecurityRequirements,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS},operations,securitySchemes};
+  return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,serverDefinitions,security:topSecurity,securityRequirements:topSecurityRequirements,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS,unresolvedPathItemCount},operations,securitySchemes};
 }
 function linkTargets(value,base){if(value===undefined||value===null)return[];const items=Array.isArray(value)?value:[value],out=[];for(const item of items){if(item===undefined||item===null)continue;const raw=typeof item==='string'?item:item?.href;const url=safeHttpUrl(raw,base);if(url)out.push(url.href);}return out;}
 function parseCatalog(document,catalogUrl){const descriptionUrls=[],apiEndpoints=[],nestedCatalogs=[];for(const entry of Array.isArray(document?.linkset)?document.linkset:[]){const anchor=safeHttpUrl(entry?.anchor,catalogUrl)?.href??catalogUrl;descriptionUrls.push(...linkTargets(entry?.['service-desc'],anchor));apiEndpoints.push(...linkTargets(entry?.item,anchor));nestedCatalogs.push(...linkTargets(entry?.['api-catalog'],anchor));}return{descriptionUrls:unique(descriptionUrls),apiEndpoints:unique(apiEndpoints),nestedCatalogs:unique(nestedCatalogs)};}
@@ -175,8 +185,8 @@ export async function discoverBrowserApis(options={},runtime={}){
     const finalUrl=safeHttpUrl(fetched.finalUrl,url.href)??url,format=formatOf(fetched.contentType,finalUrl,fetched.text);if(format!=='json'){resources.push({url:url.href,finalUrl:finalUrl.href,status:'unsupported_format',format});evidence.push({code:'API_DESCRIPTION_UNSUPPORTED_FORMAT',url:finalUrl.href,format});continue;}
     let document;try{document=JSON.parse(fetched.text);}catch{resources.push({url:url.href,finalUrl:finalUrl.href,status:'invalid_json',format});evidence.push({code:'API_DESCRIPTION_INVALID_JSON',url:finalUrl.href});continue;}
     const parsed=parseOpenApiDocument(document,finalUrl.href);if(!parsed.ok){resources.push({url:url.href,finalUrl:finalUrl.href,status:parsed.reason,format,openapi:parsed.version??null});evidence.push({code:'API_DESCRIPTION_NOT_SUPPORTED',url:finalUrl.href,reason:parsed.reason});continue;}
-    resources.push({url:url.href,finalUrl:finalUrl.href,status:'parsed',format:'json',openapi:parsed.description.openapi});descriptions.push(parsed.description);for(const op of parsed.operations)operations.push({...op,descriptionUrl:finalUrl.href});for(const scheme of parsed.securitySchemes)if(!securityMap.has(scheme.name))securityMap.set(scheme.name,scheme);evidence.push({code:'OPENAPI_DESCRIPTION_PARSED',url:finalUrl.href,openapi:parsed.description.openapi,operationCount:parsed.description.operationCount});
+    resources.push({url:url.href,finalUrl:finalUrl.href,status:'parsed',format:'json',openapi:parsed.description.openapi});descriptions.push(parsed.description);for(const op of parsed.operations)operations.push({...op,descriptionUrl:finalUrl.href});for(const scheme of parsed.securitySchemes)if(!securityMap.has(scheme.name))securityMap.set(scheme.name,scheme);evidence.push({code:'OPENAPI_DESCRIPTION_PARSED',url:finalUrl.href,openapi:parsed.description.openapi,operationCount:parsed.description.operationCount});if(parsed.description.unresolvedPathItemCount)evidence.push({code:'OPENAPI_PATH_ITEM_REFS_UNRESOLVED',url:finalUrl.href,count:parsed.description.unresolvedPathItemCount});
   }
   const securitySchemes=[...securityMap.values()].sort((a,b)=>a.name.localeCompare(b.name)),environmentPatch=descriptions.length?{api:'documented'}:{};
-  return{sources:selected,catalog,resources,descriptions,operations,securitySchemes,evidence,environmentPatch,limits:{maxDescriptions,maxOperationsPerDescription:MAX_OPERATIONS,maxDescriptionBytes:MAX_DESCRIPTION_BYTES,maxSchemaRefDepth:MAX_SCHEMA_REF_DEPTH}};
+  return{sources:selected,catalog,resources,descriptions,operations,securitySchemes,evidence,environmentPatch,limits:{maxDescriptions,maxOperationsPerDescription:MAX_OPERATIONS,maxDescriptionBytes:MAX_DESCRIPTION_BYTES,maxSchemaRefDepth:MAX_SCHEMA_REF_DEPTH,maxPathItemRefDepth:MAX_PATH_ITEM_REF_DEPTH}};
 }
