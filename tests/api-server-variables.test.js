@@ -45,3 +45,16 @@ test('keeps unresolved or inconsistent OpenAPI server variables fail-closed',asy
   assert.equal(credentialInjection.tools.length,0);
   assert.equal(credentialInjection.rejected[0]?.reason,'unsafe_or_unresolved_server');
 });
+
+test('bounds server variable evidence and treats prototype-like names as ordinary data',async()=>{
+  const base={openapi:'3.1.2',info:{title:'Server variable bounds',version:'1.0.0'},paths:{'/widgets':{get:{operationId:'listWidgets',responses:{'200':{description:'ok'}}}}}};
+  const protoVariables=JSON.parse('{"__proto__":{"default":"safe"}}');
+  const prototypeLike=await compile({...base,servers:[{url:'https://{__proto__}.api.example.test',variables:protoVariables}]});
+  assert.equal(prototypeLike.rejected.length,0);
+  assert.equal(prototypeLike.tools[0]?.execution.urlTemplate,'https://safe.api.example.test/widgets');
+  assert.equal(Object.prototype.polluted,undefined);
+
+  const oversized=await compile({...base,servers:[{url:'https://{tenant}.api.example.test',variables:{tenant:{default:'a'.repeat(2048)}}}]});
+  assert.equal(oversized.tools.length,0);
+  assert.equal(oversized.rejected[0]?.reason,'unsafe_or_unresolved_server');
+});
