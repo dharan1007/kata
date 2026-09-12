@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {discoverBrowserApis} from '../src/api-discovery.js';
 import {compileOpenApiCandidates} from '../src/api-adapter.js';
+import {buildAuthorizedExecutionPreview} from '../src/api-execution.js';
 
 function response(body){return{ok:true,status:200,url:'https://app.test/openapi.json',headers:{get(name){return name.toLowerCase()==='content-type'?'application/json':null;}},async text(){return JSON.stringify(body);}};}
 
@@ -36,6 +37,39 @@ test('preserves OpenAPI 3.1 Schema Object constraints adjacent to a local $ref',
       {maxLength:5,pattern:'^[A-Z]+$'}
     ]
   });
+});
+
+test('executes OpenAPI 3.1 ref sibling allOf constraints and validates every branch',async()=>{
+  const discovery=await discover({
+    openapi:'3.1.0',
+    info:{title:'Executable schema ref siblings',version:'1'},
+    servers:[{url:'/api'}],
+    components:{schemas:{BaseCode:{type:'string',minLength:2}}},
+    paths:{
+      '/objects':{
+        post:{
+          operationId:'createExecutableObject',
+          requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['code'],properties:{code:{$ref:'#/components/schemas/BaseCode',maxLength:5,pattern:'^[A-Z]+$'}}}}}},
+          responses:{'204':{description:'ok'}}
+        }
+      }
+    }
+  });
+
+  const candidate=compileOpenApiCandidates(discovery).tools[0];
+  const preview=buildAuthorizedExecutionPreview(candidate,{body:{code:'ABC'}},'https://app.test');
+  assert.equal(preview.readyToExecute,true);
+  assert.equal(preview.url,'https://app.test/api/objects');
+  assert.equal(preview.body,JSON.stringify({code:'ABC'}));
+
+  assert.throws(
+    ()=>buildAuthorizedExecutionPreview(candidate,{body:{code:'A'}},'https://app.test'),
+    /minLength 2/
+  );
+  assert.throws(
+    ()=>buildAuthorizedExecutionPreview(candidate,{body:{code:'abcdef'}},'https://app.test'),
+    /maxLength 5|invalid format/
+  );
 });
 
 test('keeps OpenAPI 3.0 reference siblings ignored for compatibility',async()=>{
