@@ -35,14 +35,14 @@ export function inspectBrowserRuntime(runtime={}){
     }catch{}
     return out;
   }
-  function frameDocumentEvidence(doc,index){
+  function frameDocumentEvidence(doc,index,nav){
     const apis=declaredApis(doc);
     let url=null;
     try{url=doc?.URL??null;}catch{}
     return{
       index,
       url,
-      webMcpApi:doc?.modelContext?.registerTool?'available':'unavailable',
+      webMcpApi:(doc?.modelContext?.registerTool||nav?.modelContext?.registerTool)?'available':'unavailable',
       toolsPermission:toolsPermission(doc),
       declaredApiDescriptions:apis
     };
@@ -59,8 +59,10 @@ export function inspectBrowserRuntime(runtime={}){
           const frameDoc=node.contentDocument;
           const root=frameDoc?.documentElement;
           if(root){
+            let frameNav=null;
+            try{frameNav=node.contentWindow?.navigator??null;}catch{}
             accessibleFrames++;
-            frameContexts.push(frameDocumentEvidence(frameDoc,accessibleFrames));
+            frameContexts.push(frameDocumentEvidence(frameDoc,accessibleFrames,frameNav));
             if(queue.length<maxInspectedNodes)queue.push(root);else truncated=true;
           }else inaccessibleFrames++;
         }catch{inaccessibleFrames++;}
