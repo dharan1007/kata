@@ -3,6 +3,8 @@ const STREAMING_MEDIA=new Set(['text/event-stream','application/jsonl','applicat
 const MAX_DESCRIPTION_BYTES=2*1024*1024;
 const MAX_OPERATIONS=250;
 const MAX_SCHEMA_REF_DEPTH=8;
+const MAX_SERVERS=50;
+const MAX_SERVER_VARIABLES=50;
 
 function safeHttpUrl(raw,base){
   if(raw===undefined||raw===null||raw==='')return null;
@@ -78,14 +80,28 @@ function securitySchemeRecords(document){
     oauthFlows:scheme?.flows&&typeof scheme.flows==='object'?Object.keys(scheme.flows).sort():[]
   })).sort((a,b)=>a.name.localeCompare(b.name));
 }
+function serverRecords(servers){
+  const out=[];
+  for(const item of Array.isArray(servers)?servers:[]){
+    if(!item||typeof item!=='object'||Array.isArray(item)||typeof item.url!=='string')continue;
+    const variables={};
+    for(const [name,variable] of Object.entries(item.variables??{}).slice(0,MAX_SERVER_VARIABLES)){
+      if(!name||!variable||typeof variable!=='object'||Array.isArray(variable))continue;
+      variables[name]={...(typeof variable.default==='string'?{default:variable.default}:{}),...(Array.isArray(variable.enum)?{enum:variable.enum.filter(value=>typeof value==='string').slice(0,50)}:{})};
+    }
+    out.push({url:item.url,variables});
+    if(out.length>=MAX_SERVERS)break;
+  }
+  return out;
+}
 function operationRecord(method,path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document){
   const parameters=mergedParameters(pathItem,operation,document),body=resolveRequestBody(operation.requestBody,document);
   const securityRequirements=Object.hasOwn(operation,'security')?normalizeSecurityRequirements(operation.security):topSecurityRequirements;
   const security=securityNames(securityRequirements);
   const operationSecuritySchemes=security.map(name=>securitySchemeMap.get(name)??{name,type:'unresolved',in:null,parameterName:null,scheme:null,bearerFormat:null,openIdConnectUrl:null,oauthFlows:[]});
   const selectedServers=Object.hasOwn(operation,'servers')?operation.servers:Object.hasOwn(pathItem,'servers')?pathItem.servers:document.servers;
-  const servers=(Array.isArray(selectedServers)?selectedServers:[]).map(item=>item?.url).filter(value=>typeof value==='string').slice(0,50);
-  return{method,path,operationId:typeof operation.operationId==='string'?operation.operationId:null,summary:typeof operation.summary==='string'?operation.summary:null,tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],servers,security,securityRequirements,securitySchemes:operationSecuritySchemes,streamingMedia:streamingMedia(operation),parameters:parameters.parameters,requestBody:body.requestBody,hasUnresolvedRequiredInputs:Boolean(parameters.unresolvedRequired||body.unresolvedRequired)};
+  const serverDefinitions=serverRecords(selectedServers),servers=serverDefinitions.map(item=>item.url);
+  return{method,path,operationId:typeof operation.operationId==='string'?operation.operationId:null,summary:typeof operation.summary==='string'?operation.summary:null,tags:Array.isArray(operation.tags)?operation.tags.filter(x=>typeof x==='string').slice(0,20):[],servers,serverDefinitions,security,securityRequirements,securitySchemes:operationSecuritySchemes,streamingMedia:streamingMedia(operation),parameters:parameters.parameters,requestBody:body.requestBody,hasUnresolvedRequiredInputs:Boolean(parameters.unresolvedRequired||body.unresolvedRequired)};
 }
 function parseOpenApiDocument(document,url){
   if(!document||typeof document!=='object'||Array.isArray(document))return{ok:false,reason:'invalid_document'};
@@ -98,8 +114,8 @@ function parseOpenApiDocument(document,url){
     const additional=oas32?pathItem.additionalOperations:pathItem['x-oai-additionalOperations'];
     if(additional&&typeof additional==='object'&&!Array.isArray(additional))for(const [method,operation] of Object.entries(additional)){if(!method||!operation||typeof operation!=='object'||Array.isArray(operation)||standardMethods.includes(method.toLowerCase()))continue;operations.push(operationRecord(method,path,pathItem,operation,topSecurityRequirements,securitySchemeMap,document));if(operations.length>=MAX_OPERATIONS)break outer;}
   }
-  const servers=(Array.isArray(document.servers)?document.servers:[]).map(x=>x?.url).filter(x=>typeof x==='string').slice(0,50);
-  return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,security:topSecurity,securityRequirements:topSecurityRequirements,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS},operations,securitySchemes};
+  const serverDefinitions=serverRecords(document.servers),servers=serverDefinitions.map(item=>item.url);
+  return{ok:true,description:{url,openapi:version,title:typeof document.info?.title==='string'?document.info.title:null,version:typeof document.info?.version==='string'?document.info.version:null,servers,serverDefinitions,security:topSecurity,securityRequirements:topSecurityRequirements,operationCount:operations.length,operationInventoryTruncated:operations.length>=MAX_OPERATIONS},operations,securitySchemes};
 }
 function linkTargets(value,base){if(value===undefined||value===null)return[];const items=Array.isArray(value)?value:[value],out=[];for(const item of items){if(item===undefined||item===null)continue;const raw=typeof item==='string'?item:item?.href;const url=safeHttpUrl(raw,base);if(url)out.push(url.href);}return out;}
 function parseCatalog(document,catalogUrl){const descriptionUrls=[],apiEndpoints=[],nestedCatalogs=[];for(const entry of Array.isArray(document?.linkset)?document.linkset:[]){const anchor=safeHttpUrl(entry?.anchor,catalogUrl)?.href??catalogUrl;descriptionUrls.push(...linkTargets(entry?.['service-desc'],anchor));apiEndpoints.push(...linkTargets(entry?.item,anchor));nestedCatalogs.push(...linkTargets(entry?.['api-catalog'],anchor));}return{descriptionUrls:unique(descriptionUrls),apiEndpoints:unique(apiEndpoints),nestedCatalogs:unique(nestedCatalogs)};}
