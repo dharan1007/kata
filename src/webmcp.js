@@ -36,6 +36,12 @@ function browserAnnotations(annotations={}){
  if('consequentialHint'in annotations)out.consequentialHint=Boolean(annotations.consequentialHint);
  return out;
 }
+const UNTRUSTED_CANONICAL_OUTPUTS=new Set(['kata_search_research','kata_plan_triage','kata_apply_command','kata_compile_workflow','kata_execute_program','kata_preview_automation','kata_run_automation']);
+function canonicalBrowserAnnotations(def){
+ const annotations=browserAnnotations(def.annotations);
+ if(UNTRUSTED_CANONICAL_OUTPUTS.has(def.name))annotations.untrustedContentHint=true;
+ return annotations;
+}
 function boundedText(value,max){const text=String(value??'');return text.length>max?`${text.slice(0,max-1)}…`:text;}
 function projectedRegisteredTool(tool){
  return{
@@ -68,7 +74,7 @@ function canonicalTools(runtime){
   name:def.name,
   description:def.description,
   inputSchema:structuredClone(def.inputSchema),
-  annotations:browserAnnotations(def.annotations),
+  annotations:canonicalBrowserAnnotations(def),
   execute:(input,context={})=>invokeCanonical(runtime,def.name,input,context.signal)
  }));
 }
@@ -84,7 +90,7 @@ function browserTools(runtime){
   {name:'kata_browser_compile_api_tools',description:'Compile standards-discovered OpenAPI operations into local preview-only agent tool contracts. Resolves bounded local component references, excludes credential arguments, never fetches external references, and never executes target API operations.',inputSchema:{type:'object',properties:{includeWellKnownCatalog:{type:'boolean'},maxDescriptions:{type:'integer',minimum:1,maximum:5},maxTools:{type:'integer',minimum:1,maximum:100}},required:[],additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:async(options={},context={})=>compileOpenApiCandidates(await discoverCurrentDocument(options,context),{maxTools:options.maxTools??50})},
   {name:'kata_browser_search_and_load_research',description:'Search live OpenAlex research and load the results into this browser-owned KATA workspace.',inputSchema:structuredClone(searchSchema),annotations:{readOnlyHint:false,untrustedContentHint:true},execute:({query,limit=8},context={})=>runtime.search(query,limit,'agent',{signal:context.signal})},
   {name:'kata_browser_workspace_summary',description:'Read the current browser-owned KATA workspace summary.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>runtime.summary()},
-  {name:'kata_browser_list_automations',description:'List automations saved in this browser-owned KATA workspace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>runtime.listAutomations()},
+  {name:'kata_browser_list_automations',description:'List automations saved in this browser-owned KATA workspace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>runtime.listAutomations()},
   {name:'kata_browser_run_saved_automation',description:'Preview and run a saved browser-owned KATA automation by ID against the current candidates.',inputSchema:{type:'object',properties:{automationId:{type:'string',minLength:1}},required:['automationId'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute:({automationId},context={})=>runtime.runAutomation(automationId,'agent',undefined,{signal:context.signal})},
   {name:'kata_browser_list_learned_tools',description:'List deterministic tools learned in this browser-owned KATA workspace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:false},execute:()=>runtime.listPrograms()}
  ];
