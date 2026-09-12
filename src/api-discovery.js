@@ -81,7 +81,7 @@ function resolveRequestBody(requestBody,document){
   let source=requestBody;if(requestBody&&typeof requestBody==='object'&&typeof requestBody.$ref==='string'){const key=localRef(requestBody.$ref,'#/components/requestBodies/');if(!key)return{requestBody:null,unresolvedRequired:true};source=document.components?.requestBodies?.[key];}
   if(!source||typeof source!=='object'||Array.isArray(source))return{requestBody:null,unresolvedRequired:true};
   const required=Boolean(source.required),media=source.content?.['application/json'];if(!media?.schema)return{requestBody:{required,contentType:null,schema:null},unresolvedRequired:required};
-  const resolved=resolveSchema(media.schema,document);return{requestBody:{required,contentType:'application/json',schema:resolved.schema},unresolvedRequired:required&&resolved.unresolved};
+  const resolved=resolveSchema(media.schema,document);return{requestBody:{required,contentType:'application/json',schema:resolved.unresolved?null:resolved.schema},unresolvedRequired:required&&resolved.unresolved};
 }
 function securitySchemeRecords(document){
   return Object.entries(document.components?.securitySchemes??{}).map(([name,scheme])=>({
