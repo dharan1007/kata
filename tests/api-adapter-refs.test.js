@@ -57,3 +57,36 @@ test('bounds recursive schema refs and rejects cyclic required input rather than
   assert.equal(compiled.tools.length,0);
   assert.equal(compiled.rejected[0].reason,'unsupported_required_input');
 });
+
+test('resolves bounded local OpenAPI Path Item refs into executable operations',async()=>{
+  const document=structuredClone(BASE);
+  document.components.pathItems={
+    GetObject:{
+      parameters:[{$ref:'#/components/parameters/Id'}],
+      get:{operationId:'getObject',responses:{'200':{description:'ok'}}}
+    }
+  };
+  document.paths={'/objects/{id}':{$ref:'#/components/pathItems/GetObject'}};
+  const calls=[];
+  const discovery=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async url=>{calls.push(String(url));return response(document);}});
+  assert.deepEqual(calls,['https://app.test/openapi.json']);
+  assert.equal(discovery.operations.length,1);
+  assert.equal(discovery.operations[0].operationId,'getObject');
+  assert.equal(discovery.operations[0].parameters[0].name,'id');
+  assert.equal(discovery.descriptions[0].unresolvedPathItemCount,0);
+  const compiled=compileOpenApiCandidates(discovery);
+  assert.equal(compiled.tools.length,1);
+  assert.equal(compiled.tools[0].execution.urlTemplate,'https://app.test/api/objects/{id}');
+});
+
+test('keeps external OpenAPI Path Item refs fail-closed and reports the blocked reference',async()=>{
+  const document=structuredClone(BASE);
+  document.paths={'/external':{$ref:'https://attacker.test/path-item.json'}};
+  const calls=[];
+  const discovery=await discoverBrowserApis({declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},{origin:'https://app.test',fetch:async url=>{calls.push(String(url));return response(document);}});
+  assert.deepEqual(calls,['https://app.test/openapi.json']);
+  assert.equal(discovery.operations.length,0);
+  assert.equal(discovery.descriptions[0].unresolvedPathItemCount,1);
+  assert.equal(discovery.evidence.some(item=>item.code==='OPENAPI_PATH_ITEM_REFS_UNRESOLVED'&&item.count===1),true);
+  assert.equal(compileOpenApiCandidates(discovery).tools.length,0);
+});
