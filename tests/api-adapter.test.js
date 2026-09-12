@@ -93,6 +93,18 @@ test('request preview validates required path/body inputs and never accepts auth
   assert.throws(()=>previewOpenApiRequest(create,{}),/body/);
 });
 
+test('serializes primitive OpenAPI path parameters according to simple, label, and matrix styles',()=>{
+  const discovery={descriptions:[{url:'https://app.test/openapi.json',servers:['https://app.test/api']}],operations:[
+    {method:'GET',path:'/simple/{id}',operationId:'simplePath',summary:null,security:[],securityRequirements:[],securitySchemes:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[{name:'id',in:'path',required:true,style:null,explode:null,schema:{type:'string'}}],requestBody:null},
+    {method:'GET',path:'/label/{id}',operationId:'labelPath',summary:null,security:[],securityRequirements:[],securitySchemes:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[{name:'id',in:'path',required:true,style:'label',explode:false,schema:{type:'string'}}],requestBody:null},
+    {method:'GET',path:'/matrix/{id}',operationId:'matrixPath',summary:null,security:[],securityRequirements:[],securitySchemes:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[{name:'id',in:'path',required:true,style:'matrix',explode:false,schema:{type:'string'}}],requestBody:null}
+  ],securitySchemes:[]};
+  const {tools}=compileOpenApiCandidates(discovery);
+  assert.equal(previewOpenApiRequest(tools.find(x=>x.name==='simplePath'),{path:{id:'abc 123'}}).url,'https://app.test/api/simple/abc%20123');
+  assert.equal(previewOpenApiRequest(tools.find(x=>x.name==='labelPath'),{path:{id:'abc 123'}}).url,'https://app.test/api/label/.abc%20123');
+  assert.equal(previewOpenApiRequest(tools.find(x=>x.name==='matrixPath'),{path:{id:'abc 123'}}).url,'https://app.test/api/matrix/;id=abc%20123');
+});
+
 test('rejects unsafe server templates and invalid agent names instead of inventing executable endpoints',()=>{
   const discovery={descriptions:[{url:'https://app.test/openapi.json',servers:['javascript:alert(1)']}],operations:[
     {method:'GET',path:'/x',operationId:'validName',summary:null,security:[],streamingMedia:[],descriptionUrl:'https://app.test/openapi.json',parameters:[],requestBody:null},
