@@ -84,3 +84,33 @@ test('runtime refuses consequential writes before an effect engine is installed'
     store.close();
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('durable resume treats reordered JSON object properties as the same bound run input',async()=>{
+  const {dir,file}=tempFile();
+  try{
+    const p=program();
+    p.inputSchema={
+      type:'object',
+      properties:{
+        recordId:{type:'string'},
+        options:{
+          type:'object',
+          properties:{alpha:{type:'integer'},beta:{type:'integer'}},
+          required:['alpha','beta'],
+          additionalProperties:false,
+        },
+      },
+      required:['recordId','options'],
+      additionalProperties:false,
+    };
+    const calls=[];
+    const store=new SqliteRunStore({filename:file});
+    const runner=createDurableRunner({store,invoke:async ({node,args})=>{calls.push(node.id);return node.id==='a'?{record:{id:args.id}}:{saved:args.record.id};}});
+    const first=await runner.execute({runId:'run_reordered_input',program:p,input:{recordId:'R1',options:{beta:2,alpha:1}},stepLimit:1});
+    assert.equal(first.status,'SUSPENDED');
+    const second=await runner.execute({runId:'run_reordered_input',program:p,input:{options:{alpha:1,beta:2},recordId:'R1'}});
+    assert.equal(second.status,'COMPLETED');
+    assert.deepEqual(calls,['a','b']);
+    store.close();
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
