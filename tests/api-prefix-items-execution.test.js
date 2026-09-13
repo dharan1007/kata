@@ -59,6 +59,36 @@ test('prefixItems does not apply the tail items schema to tuple positions it alr
   );
 });
 
+test('supports boolean items schemas so prefixItems tuples can be closed without extra elements',()=>{
+  const schema={
+    type:'array',
+    prefixItems:[{type:'string'},{type:'integer'}],
+    items:false
+  };
+
+  assert.equal(
+    buildAuthorizedExecutionPreview(candidate(schema),{body:['job',2]},'https://app.test').readyToExecute,
+    true
+  );
+  assert.throws(
+    ()=>buildAuthorizedExecutionPreview(candidate(schema),{body:['job',2,true]},'https://app.test'),
+    /items|schema|Invalid API execution arguments/
+  );
+});
+
+test('supports boolean true items schemas as an explicit unconstrained tail',()=>{
+  const schema={
+    type:'array',
+    prefixItems:[{type:'string'}],
+    items:true
+  };
+
+  const body=['job',2,{ok:true},null];
+  const preview=buildAuthorizedExecutionPreview(candidate(schema),{body},'https://app.test');
+  assert.equal(preview.readyToExecute,true);
+  assert.equal(preview.body,JSON.stringify(body));
+});
+
 test('rejects malformed or oversized executable prefixItems schemas',()=>{
   assert.throws(
     ()=>buildAuthorizedExecutionPreview(candidate({type:'array',prefixItems:[]}),{body:[]},'https://app.test'),
