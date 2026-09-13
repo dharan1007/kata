@@ -10,14 +10,15 @@ function op(semanticId,input,{effect='READ_ONLY',idempotency='intrinsic',capabil
   return {semanticId,target:semanticId,input,effect:{class:effect,idempotency},capabilities,authorizationScopes:scopes,outputSchema:true};
 }
 
-function demo(id,source,operations){
-  let trace=createTrace({id,source:{kind:source,authority:'user-authorized'},startedAt:at,metadata:{}});
+function demo(id,source,operations,{authority='user-authorized',status='success',complete=true}={}){
+  let trace=createTrace({id,source:{kind:source,authority},startedAt:at,metadata:{}});
   let parent=[];
   for(let i=0;i<operations.length;i++){
     const eventId=`${id}_e${i+1}`;
     trace=appendTraceEvent(trace,{id:eventId,kind:'ACTION_COMPLETED',at,parents:parent,payload:{operation:operations[i],output:{ok:true}}});
     parent=[eventId];
   }
+  if(complete)trace=appendTraceEvent(trace,{id:`${id}_done`,kind:'TRACE_COMPLETED',at,parents:parent,payload:{status}});
   return trace;
 }
 
@@ -42,6 +43,7 @@ test('compiler v2 generalizes N demonstrations with nested typed parameters into
   assert.deepEqual(result.program.inputSchema.properties.step_0002__workId,{type:'string'});
   assert.deepEqual(result.program.inputSchema.required,['step_0001__filters__year','step_0001__query','step_0002__workId']);
   assert.equal(result.evidence.demonstrationCount,3);
+  assert.equal(result.evidence.demonstrationHashes.length,3);
 });
 
 test('compiler semantics are transport-independent and deterministic across demonstration order',()=>{
@@ -99,4 +101,22 @@ test('compiler requires explicit effect and authorization evidence and enforces 
 
   assert.throws(()=>compileTraces('Too few',[good]),/COMPILER_DEMO_COUNT_INVALID/);
   assert.throws(()=>compileTraces('Too many',Array.from({length:65},(_,i)=>demo(`d${i}`,'HTTP',[op('x.read',{i})]))),/COMPILER_DEMO_COUNT_INVALID/);
+});
+
+test('compiler learns only from complete successful authorized and independent demonstrations',()=>{
+  const operation=op('research.search',{query:'agents'});
+  const goodA=demo('goodA','HTTP',[operation]);
+  const goodB=demo('goodB','HTTP',[op('research.search',{query:'mcp'})]);
+
+  const incomplete=demo('incomplete','HTTP',[operation],{complete:false});
+  assert.equal(compileTraces('Incomplete',[incomplete,goodB]).reason,'DEMONSTRATION_INCOMPLETE');
+
+  const failed=demo('failed','HTTP',[operation],{status:'failed'});
+  assert.equal(compileTraces('Failed',[failed,goodB]).reason,'DEMONSTRATION_NOT_SUCCESSFUL');
+
+  const observed=demo('observed','HTTP',[operation],{authority:'observed'});
+  assert.equal(compileTraces('Observed',[observed,goodB]).reason,'DEMONSTRATION_AUTHORITY_INSUFFICIENT');
+
+  const duplicate=demo('duplicate','MCP',[operation]);
+  assert.equal(compileTraces('Duplicate',[goodA,duplicate]).reason,'DUPLICATE_DEMONSTRATION');
 });
