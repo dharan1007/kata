@@ -68,8 +68,8 @@ test('compiler aligns structural differences but abstains instead of inventing a
 });
 
 test('compiler detects ambiguous optimal alignments and abstains',()=>{
-  const a=demo('a','HTTP',[op('a.read',{}),op('x.inspect',{}),op('a.read',{})]);
-  const b=demo('b','HTTP',[op('a.read',{}),op('a.read',{})]);
+  const a=demo('a','HTTP',[op('a.read',{}),op('a.read',{})]);
+  const b=demo('b','HTTP',[op('a.read',{})]);
   const result=compileTraces('Ambiguous alignment',[a,b]);
   assert.equal(result.status,'NEED_MORE_EVIDENCE');
   assert.equal(result.reason,'ALIGNMENT_AMBIGUOUS');
