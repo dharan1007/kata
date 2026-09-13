@@ -61,6 +61,11 @@ function resolveSchema(schema,document,depth=0,seen=new Set()){
     if(key==='additionalProperties'&&value&&typeof value==='object'){const resolved=resolveSchema(value,document,depth+1,new Set(seen));if(resolved.unresolved)unresolved=true;else out.additionalProperties=resolved.schema;continue;}
     out[key]=structuredClone(value);
   }
+  if(/^3\.0(?:\.|$)/.test(String(document.openapi??''))&&Object.hasOwn(out,'nullable')){
+    const nullable=out.nullable;delete out.nullable;
+    if(typeof nullable!=='boolean')unresolved=true;
+    else if(nullable===true&&typeof out.type==='string')out.type=[out.type,'null'];
+  }
   const required=Array.isArray(out.required)?out.required.filter(x=>typeof x==='string'):[];if(required.length&&out.properties)for(const name of required)if(!Object.hasOwn(out.properties,name))unresolved=true;
   return{schema:out,unresolved};
 }
