@@ -7,7 +7,7 @@ import {hashKirProgram,validateKirProgram} from '../lib/kir/index.js';
 const at='2026-09-13T08:00:00.000Z';
 
 function op(semanticId,input,{effect='READ_ONLY',idempotency='intrinsic',capabilities=['research:read'],scopes=['research:read']}={}){
-  return {semanticId,target:semanticId,input,effect:{class:effect,idempotency},capabilities,authorization:{scopes},outputSchema:true};
+  return {semanticId,target:semanticId,input,effect:{class:effect,idempotency},capabilities,authorizationScopes:scopes,outputSchema:true};
 }
 
 function demo(id,source,operations){
