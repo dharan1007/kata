@@ -28,6 +28,26 @@ test('non-idempotent external writes cannot be retried without reconciliation or
   assert.equal(result.errors.some(error=>error.code==='UNSAFE_RETRY_EFFECT'),true);
 });
 
+test('retry safety requires concrete keyed, reconciliation, or compensation evidence',()=>{
+  const retry={maxAttempts:3,strategy:'exponential',baseDelayMs:10,maxDelayMs:100};
+  const cases=[
+    {idempotency:'keyed',effect:'IDEMPOTENT_WRITE',field:'keyBinding',value:{source:'request.id'}},
+    {idempotency:'reconcile',effect:'NON_IDEMPOTENT_WRITE',field:'reconciliation',value:{strategy:'read-after-write'}},
+    {idempotency:'compensated',effect:'REVERSIBLE_WRITE',field:'compensation',value:{operation:'records.undo'}},
+  ];
+  for(const item of cases){
+    const candidate=node('a',{effect:item.effect,idempotency:item.idempotency,capabilities:['records:write'],scopes:['records:write'],retry});
+    let result=verifyKirProgram(program([candidate]));
+    assert.equal(result.errors.some(error=>error.code==='UNSAFE_RETRY_EFFECT'),true,`${item.idempotency} without evidence must fail closed`);
+    candidate.effect[item.field]={};
+    result=verifyKirProgram(program([candidate]));
+    assert.equal(result.errors.some(error=>error.code==='UNSAFE_RETRY_EFFECT'),true,`${item.idempotency} with empty evidence must fail closed`);
+    candidate.effect[item.field]=item.value;
+    result=verifyKirProgram(program([candidate]));
+    assert.equal(result.errors.some(error=>error.code==='UNSAFE_RETRY_EFFECT'),false,`${item.idempotency} with concrete evidence may retry`);
+  }
+});
+
 test('destructive effects require an approval node on every path before mutation',()=>{
   const destructive=node('destroy',{effect:'DESTRUCTIVE_WRITE',idempotency:'keyed',capabilities:['records:delete'],scopes:['records:delete']});
   let result=verifyKirProgram(program([node('a'),destructive],[{from:'a',to:'destroy'}]));
