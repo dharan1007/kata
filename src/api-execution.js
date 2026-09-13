@@ -13,7 +13,7 @@ const MAX_REQUEST_URL_BYTES=16*1024;
 const MAX_REQUEST_HEADER_BYTES=32*1024;
 const MAX_ALLOF_BRANCHES=32;
 const MAX_PATTERN_LENGTH=1024;
-const EXECUTABLE_SCHEMA_KEYS=new Set(['type','enum','properties','required','additionalProperties','items','allOf','minItems','maxItems','minLength','maxLength','pattern','multipleOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','title','description','default','examples','example','format','deprecated','readOnly','writeOnly']);
+const EXECUTABLE_SCHEMA_KEYS=new Set(['type','enum','const','properties','required','additionalProperties','items','allOf','minItems','maxItems','minLength','maxLength','pattern','multipleOf','minimum','maximum','exclusiveMinimum','exclusiveMaximum','title','description','default','examples','example','format','deprecated','readOnly','writeOnly']);
 const EXECUTABLE_SCHEMA_TYPES=new Set(['object','array','string','integer','number','boolean','null']);
 
 function boundedInt(value,fallback,min,max){const n=Number(value);return Number.isInteger(n)?Math.max(min,Math.min(max,n)):fallback;}
