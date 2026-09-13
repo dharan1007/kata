@@ -53,7 +53,7 @@ test('executes JSON Schema oneOf request bodies only when exactly one bounded br
     /oneOf/
   );
   assert.throws(
-    ()=>buildAuthorizedExecutionPreview(candidate(schema),{body:{value:-5}},'https://app.test'),
+    ()=>buildAuthorizedExecutionPreview(candidate(schema),{body:{value:'not-a-number'}},'https://app.test'),
     /oneOf/
   );
 });
