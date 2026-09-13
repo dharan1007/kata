@@ -24,7 +24,7 @@ function retryProgram(){
         capabilities:['records:read'],
         authorization:{scopes:['records:read']},
         timeoutMs:1000,
-        retry:{maxAttempts:2,strategy:'none'},
+        retry:{maxAttempts:2,strategy:'fixed',baseDelayMs:0,maxDelayMs:0,jitter:false},
         budget:{maxDurationMs:1000},
         spec:{target:{transport:'semantic',name:'records.read'},arguments:{}},
       }],
