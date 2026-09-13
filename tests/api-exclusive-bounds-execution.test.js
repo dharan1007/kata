@@ -6,11 +6,15 @@ import {buildAuthorizedExecutionPreview} from '../src/api-execution.js';
 
 function response(body){return{ok:true,status:200,url:'https://app.test/openapi.json',headers:{get(name){return name.toLowerCase()==='content-type'?'application/json':null;}},async text(){return JSON.stringify(body);}};}
 
-async function candidateFor(document){
-  const discovery=await discoverBrowserApis(
+async function discoveryFor(document){
+  return discoverBrowserApis(
     {declaredApiDescriptions:['https://app.test/openapi.json'],includeWellKnownCatalog:false},
     {origin:'https://app.test',fetch:async()=>response(document)}
   );
+}
+
+async function candidateFor(document){
+  const discovery=await discoveryFor(document);
   assert.equal(discovery.operations.length,1);
   const compiled=compileOpenApiCandidates(discovery);
   assert.equal(compiled.tools.length,1);
@@ -64,4 +68,18 @@ test('normalizes OpenAPI 3.0 boolean exclusive bounds into executable numeric co
     ()=>buildAuthorizedExecutionPreview(candidate,{body:{amount:10}},'https://app.test'),
     /exclusiveMaximum 10/
   );
+});
+
+test('rejects OpenAPI 3.0 numeric exclusive-bound declarations instead of treating them as 3.1 semantics',async()=>{
+  const discovery=await discoveryFor(documentFor('3.0.4',{type:'number',minimum:0,exclusiveMinimum:1}));
+  assert.equal(discovery.operations.length,1);
+
+  const compiled=compileOpenApiCandidates(discovery);
+  assert.equal(compiled.tools.length,0);
+  assert.deepEqual(compiled.rejected,[{
+    operationId:'setLimit',
+    method:'POST',
+    path:'/limits',
+    reason:'unsupported_schema_contract'
+  }]);
 });
