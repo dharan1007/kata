@@ -19,13 +19,15 @@ function normalizeSchemaForExecution(schema,openapi){
   if(/^3\.0(?:\.|$)/.test(String(openapi??''))){
     if(Object.hasOwn(out,'exclusiveMinimum')){
       const exclusive=out.exclusiveMinimum;
-      if(exclusive===true&&typeof out.minimum==='number'&&Number.isFinite(out.minimum))out.exclusiveMinimum=out.minimum;
-      else if(exclusive===false)delete out.exclusiveMinimum;
+      if(typeof exclusive!=='boolean')throw new TypeError('Invalid OpenAPI 3.0 exclusiveMinimum schema');
+      if(exclusive===true){if(typeof out.minimum!=='number'||!Number.isFinite(out.minimum))throw new TypeError('OpenAPI 3.0 exclusiveMinimum requires a finite minimum');out.exclusiveMinimum=out.minimum;}
+      else delete out.exclusiveMinimum;
     }
     if(Object.hasOwn(out,'exclusiveMaximum')){
       const exclusive=out.exclusiveMaximum;
-      if(exclusive===true&&typeof out.maximum==='number'&&Number.isFinite(out.maximum))out.exclusiveMaximum=out.maximum;
-      else if(exclusive===false)delete out.exclusiveMaximum;
+      if(typeof exclusive!=='boolean')throw new TypeError('Invalid OpenAPI 3.0 exclusiveMaximum schema');
+      if(exclusive===true){if(typeof out.maximum!=='number'||!Number.isFinite(out.maximum))throw new TypeError('OpenAPI 3.0 exclusiveMaximum requires a finite maximum');out.exclusiveMaximum=out.maximum;}
+      else delete out.exclusiveMaximum;
     }
   }
   if(out.properties&&typeof out.properties==='object'&&!Array.isArray(out.properties))for(const [name,child] of Object.entries(out.properties))out.properties[name]=normalizeSchemaForExecution(child,openapi);
@@ -67,6 +69,7 @@ export function compileOpenApiCandidates(discovery={},options={}){
     const description=descriptionFor(discovery,operation),base=operationBaseUrl(discovery,operation),urlTemplate=base?makeUrlTemplate(base,operation.path):null;
     if(!urlTemplate){rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsafe_or_unresolved_server'});continue;}
     if(hasUnsupportedRequiredParameter(operation)){rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsupported_required_input'});continue;}
+    let inputSchema;try{inputSchema=inputSchemaFor(operation,description?.openapi);}catch{rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsupported_schema_contract'});continue;}
     const securityRequirements=Array.isArray(operation.securityRequirements)?clone(operation.securityRequirements):[];
     const securitySchemes=Array.isArray(operation.securitySchemes)?clone(operation.securitySchemes):[];
     const anonymousAlternative=securityRequirements.length===0||securityRequirements.some(requirement=>Array.isArray(requirement)&&requirement.length===0);
@@ -74,7 +77,7 @@ export function compileOpenApiCandidates(discovery={},options={}){
     tools.push({
       kind:'openapi-candidate',name,
       description:operation.summary||`${operation.method} ${operation.path}`,
-      inputSchema:inputSchemaFor(operation,description?.openapi),
+      inputSchema,
       annotations:{readOnlyHint:String(operation.method).toUpperCase()==='GET'||String(operation.method).toUpperCase()==='HEAD',untrustedContentHint:true},
       execution:{mode:'preview-only',method:String(operation.method??'').toUpperCase(),urlTemplate,pathSerialization:pathSerializationFor(operation),querySerialization:querySerializationFor(operation),descriptionUrl:operation.descriptionUrl??null,security:Array.isArray(operation.security)?[...operation.security]:[],securityRequirements,securitySchemes,requiresAuthorization:!anonymousAlternative,streamingMedia:Array.isArray(operation.streamingMedia)?[...operation.streamingMedia]:[]}
     });
