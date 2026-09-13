@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {SqliteRunStore,createDurableRunner} from '../lib/runtime/index.js';
 
-function retryProgram(){
+function retryProgram({baseDelayMs=0}={}){
   return {
     irVersion:2,
     id:'durable_retry_budget',
@@ -24,7 +24,7 @@ function retryProgram(){
         capabilities:['records:read'],
         authorization:{scopes:['records:read']},
         timeoutMs:1000,
-        retry:{maxAttempts:2,strategy:'fixed',baseDelayMs:0,maxDelayMs:0,jitter:false},
+        retry:{maxAttempts:2,strategy:'fixed',baseDelayMs,maxDelayMs:baseDelayMs,jitter:false},
         budget:{maxDurationMs:1000},
         spec:{target:{transport:'semantic',name:'records.read'},arguments:{}},
       }],
@@ -83,6 +83,55 @@ test('durable retry budget survives a crash after a persisted failed attempt',as
     assert.equal(calls,2,'maxAttempts=2 must cap attempts across crash/restart, not per process call');
     const starts=store.load('run_retry_resume').events.filter(event=>event.type==='StepStarted');
     assert.deepEqual(starts.map(event=>event.payload.attempt),[1,2]);
+    store.close();
+  }finally{
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+test('durable retry backoff survives a crash after a persisted failed attempt',async()=>{
+  const {dir,file}=tempFile();
+  try{
+    const delayMs=200;
+    let store=new SqliteRunStore({filename:file});
+    const realAppend=store.append.bind(store);
+    let crashed=false;
+    store.append=(runId,expectedRevision,events)=>{
+      const result=realAppend(runId,expectedRevision,events);
+      if(!crashed&&events.some(event=>event.type==='StepAttemptFailed')){
+        crashed=true;
+        throw Object.assign(new Error('simulated process crash'),{code:'SIMULATED_CRASH'});
+      }
+      return result;
+    };
+    let runner=createDurableRunner({
+      store,
+      invoke:async ()=>{
+        throw Object.assign(new Error('upstream unavailable'),{code:'UPSTREAM_UNAVAILABLE'});
+      },
+    });
+    await assert.rejects(
+      runner.execute({runId:'run_retry_backoff_resume',program:retryProgram({baseDelayMs:delayMs}),input:{}}),
+      /simulated process crash/,
+    );
+    const failedAt=Date.parse(store.load('run_retry_backoff_resume').events.find(event=>event.type==='StepAttemptFailed').at);
+    store.close();
+
+    store=new SqliteRunStore({filename:file});
+    let retriedAt=0;
+    runner=createDurableRunner({
+      store,
+      invoke:async ()=>{
+        retriedAt=Date.now();
+        return {ok:true};
+      },
+    });
+    const resumed=await runner.execute({runId:'run_retry_backoff_resume',program:retryProgram({baseDelayMs:delayMs})});
+    assert.equal(resumed.status,'COMPLETED');
+    assert.ok(
+      retriedAt-failedAt>=150,
+      `retry resumed after ${retriedAt-failedAt}ms; persisted backoff requires approximately ${delayMs}ms`,
+    );
     store.close();
   }finally{
     rmSync(dir,{recursive:true,force:true});
