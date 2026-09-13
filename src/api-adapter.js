@@ -13,6 +13,28 @@ function supportedParameterSchema(parameter){const primitive=primitiveParameterS
 function supportedParameterSerialization(parameter){const style=normalizedParameterStyle(parameter),schema=supportedParameterSchema(parameter);if(!schema)return false;if(parameter?.allowReserved!==undefined&&typeof parameter.allowReserved!=='boolean')return false;if(schema.type!=='array'){if(parameter?.in==='path')return style==='simple'||style==='label'||style==='matrix';if(parameter?.in==='query')return style==='form';if(parameter?.in==='header')return style==='simple';return false;}if(parameter?.in!=='query'||parameter?.allowReserved===true)return false;const explode=normalizedExplode(parameter);if(style==='form')return true;if(style==='spaceDelimited'||style==='pipeDelimited')return explode===false;return false;}
 function groupSchema(parameters,location){const properties={},required=[];for(const parameter of Array.isArray(parameters)?parameters:[]){if(parameter?.in!==location||typeof parameter.name!=='string'||!parameter.name)continue;if(location==='header'&&FORBIDDEN_HEADERS.has(parameter.name.toLowerCase()))continue;const schema=supportedParameterSchema(parameter);if(!schema||!supportedParameterSerialization(parameter))continue;properties[parameter.name]=schema;if(parameter.required)required.push(parameter.name);}if(!Object.keys(properties).length)return null;return{type:'object',properties,...(required.length?{required}:{}),additionalProperties:false};}
 function descriptionFor(discovery,operation){return (discovery.descriptions??[]).find(item=>item?.url===operation.descriptionUrl)||null;}
+function normalizeSchemaForExecution(schema,openapi){
+  const out=clone(schema);
+  if(!out||typeof out!=='object'||Array.isArray(out))return out;
+  if(/^3\.0(?:\.|$)/.test(String(openapi??''))){
+    if(Object.hasOwn(out,'exclusiveMinimum')){
+      const exclusive=out.exclusiveMinimum;
+      if(typeof exclusive!=='boolean')throw new TypeError('Invalid OpenAPI 3.0 exclusiveMinimum schema');
+      if(exclusive===true){if(typeof out.minimum!=='number'||!Number.isFinite(out.minimum))throw new TypeError('OpenAPI 3.0 exclusiveMinimum requires a finite minimum');out.exclusiveMinimum=out.minimum;}
+      else delete out.exclusiveMinimum;
+    }
+    if(Object.hasOwn(out,'exclusiveMaximum')){
+      const exclusive=out.exclusiveMaximum;
+      if(typeof exclusive!=='boolean')throw new TypeError('Invalid OpenAPI 3.0 exclusiveMaximum schema');
+      if(exclusive===true){if(typeof out.maximum!=='number'||!Number.isFinite(out.maximum))throw new TypeError('OpenAPI 3.0 exclusiveMaximum requires a finite maximum');out.exclusiveMaximum=out.maximum;}
+      else delete out.exclusiveMaximum;
+    }
+  }
+  if(out.properties&&typeof out.properties==='object'&&!Array.isArray(out.properties))for(const [name,child] of Object.entries(out.properties))out.properties[name]=normalizeSchemaForExecution(child,openapi);
+  if(out.items&&typeof out.items==='object'&&!Array.isArray(out.items))out.items=normalizeSchemaForExecution(out.items,openapi);
+  if(Array.isArray(out.allOf))out.allOf=out.allOf.map(branch=>normalizeSchemaForExecution(branch,openapi));
+  return out;
+}
 function resolveServerDefinition(server,base){
   if(typeof server==='string'){if(server.includes('{')||server.includes('}'))return null;return safeHttpUrl(server,base);}
   if(!server||typeof server!=='object'||Array.isArray(server)||typeof server.url!=='string')return null;
@@ -30,7 +52,7 @@ function resolveServerDefinition(server,base){
   return safeHttpUrl(raw,base);
 }
 function operationBaseUrl(discovery,operation){const description=descriptionFor(discovery,operation);if(!description)return null;const definitions=Array.isArray(operation?.serverDefinitions)?operation.serverDefinitions:Array.isArray(description.serverDefinitions)?description.serverDefinitions:null;if(definitions?.length)return resolveServerDefinition(definitions[0],description.url);const servers=Array.isArray(operation?.servers)?operation.servers:description.servers;const raw=Array.isArray(servers)&&servers.length?servers[0]:'/';return resolveServerDefinition(raw,description.url);}
-function inputSchemaFor(operation){const properties={},required=[];for(const location of PARAM_LOCATIONS){const key=location==='header'?'headers':location;const group=groupSchema(operation.parameters,location);if(!group)continue;properties[key]=group;if((group.required??[]).length)required.push(key);}const body=operation.requestBody;if(body?.contentType==='application/json'&&body.schema&&typeof body.schema==='object'){properties.body=clone(body.schema);if(body.required)required.push('body');}return{type:'object',properties,...(required.length?{required}:{}),additionalProperties:false};}
+function inputSchemaFor(operation,openapi){const properties={},required=[];for(const location of PARAM_LOCATIONS){const key=location==='header'?'headers':location;const group=groupSchema(operation.parameters,location);if(!group)continue;properties[key]=group;if((group.required??[]).length)required.push(key);}const body=operation.requestBody;if(body?.contentType==='application/json'&&body.schema&&typeof body.schema==='object'){properties.body=clone(body.schema);if(body.required)required.push('body');}return normalizeSchemaForExecution({type:'object',properties,...(required.length?{required}:{}),additionalProperties:false},openapi);}
 function hasUnsupportedRequiredParameter(operation){if(operation?.hasUnresolvedRequiredInputs)return true;for(const parameter of Array.isArray(operation.parameters)?operation.parameters:[]){if(!parameter?.required)continue;if(!PARAM_LOCATIONS.has(parameter.in))return true;if(parameter.in==='header'&&FORBIDDEN_HEADERS.has(String(parameter.name).toLowerCase()))return true;if(!supportedParameterSchema(parameter)||!supportedParameterSerialization(parameter))return true;}if(operation.requestBody?.required&&operation.requestBody?.contentType!=='application/json')return true;return false;}
 function pathSerializationFor(operation){const out={};for(const parameter of Array.isArray(operation?.parameters)?operation.parameters:[]){if(parameter?.in!=='path'||typeof parameter.name!=='string'||!parameter.name||!primitiveParameterSchema(parameter.schema)||!supportedParameterSerialization(parameter))continue;out[parameter.name]=normalizedParameterStyle(parameter);}return out;}
 function querySerializationFor(operation){const out={};for(const parameter of Array.isArray(operation?.parameters)?operation.parameters:[]){if(parameter?.in!=='query'||typeof parameter.name!=='string'||!parameter.name||!supportedParameterSerialization(parameter))continue;const schema=supportedParameterSchema(parameter);out[parameter.name]={style:normalizedParameterStyle(parameter),explode:normalizedExplode(parameter),type:schema.type,allowReserved:parameter.allowReserved===true};}return out;}
@@ -44,9 +66,10 @@ export function compileOpenApiCandidates(discovery={},options={}){
     const name=operation?.operationId;
     if(typeof name!=='string'||!SAFE_NAME.test(name)){rejected.push({operationId:name??null,method:operation?.method??null,path:operation?.path??null,reason:'invalid_agent_name'});continue;}
     if(names.has(name)){rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'duplicate_agent_name'});continue;}
-    const base=operationBaseUrl(discovery,operation),urlTemplate=base?makeUrlTemplate(base,operation.path):null;
+    const description=descriptionFor(discovery,operation),base=operationBaseUrl(discovery,operation),urlTemplate=base?makeUrlTemplate(base,operation.path):null;
     if(!urlTemplate){rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsafe_or_unresolved_server'});continue;}
     if(hasUnsupportedRequiredParameter(operation)){rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsupported_required_input'});continue;}
+    let inputSchema;try{inputSchema=inputSchemaFor(operation,description?.openapi);}catch{rejected.push({operationId:name,method:operation?.method??null,path:operation?.path??null,reason:'unsupported_schema_contract'});continue;}
     const securityRequirements=Array.isArray(operation.securityRequirements)?clone(operation.securityRequirements):[];
     const securitySchemes=Array.isArray(operation.securitySchemes)?clone(operation.securitySchemes):[];
     const anonymousAlternative=securityRequirements.length===0||securityRequirements.some(requirement=>Array.isArray(requirement)&&requirement.length===0);
@@ -54,7 +77,7 @@ export function compileOpenApiCandidates(discovery={},options={}){
     tools.push({
       kind:'openapi-candidate',name,
       description:operation.summary||`${operation.method} ${operation.path}`,
-      inputSchema:inputSchemaFor(operation),
+      inputSchema,
       annotations:{readOnlyHint:String(operation.method).toUpperCase()==='GET'||String(operation.method).toUpperCase()==='HEAD',untrustedContentHint:true},
       execution:{mode:'preview-only',method:String(operation.method??'').toUpperCase(),urlTemplate,pathSerialization:pathSerializationFor(operation),querySerialization:querySerializationFor(operation),descriptionUrl:operation.descriptionUrl??null,security:Array.isArray(operation.security)?[...operation.security]:[],securityRequirements,securitySchemes,requiresAuthorization:!anonymousAlternative,streamingMedia:Array.isArray(operation.streamingMedia)?[...operation.streamingMedia]:[]}
     });
