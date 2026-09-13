@@ -57,3 +57,14 @@ test('executes JSON Schema oneOf request bodies only when exactly one bounded br
     /oneOf/
   );
 });
+
+test('rejects empty or oversized executable anyOf and oneOf branch sets',()=>{
+  assert.throws(
+    ()=>buildAuthorizedExecutionPreview(candidate({anyOf:[]}),{body:{}},'https://app.test'),
+    /Invalid or oversized anyOf schema/
+  );
+  assert.throws(
+    ()=>buildAuthorizedExecutionPreview(candidate({oneOf:Array.from({length:33},()=>({type:'string'}))}),{body:'x'},'https://app.test'),
+    /Invalid or oversized oneOf schema/
+  );
+});
