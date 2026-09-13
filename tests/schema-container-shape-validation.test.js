@@ -31,3 +31,11 @@ test('keeps valid boolean and object subschemas accepted for items and additiona
   assert.throws(()=>assertSchema({type:'object',additionalProperties:false},{blocked:'value'}),/INVALID_ARGUMENTS/);
   assert.doesNotThrow(()=>assertSchema({type:'array',items:{type:'integer'}},[1,2,3]));
 });
+
+test('rejects malformed multipleOf declarations as INVALID_SCHEMA rather than blaming the instance',()=>{
+  expectInvalidSchema({type:'number',multipleOf:0},1);
+  expectInvalidSchema({type:'number',multipleOf:-2},4);
+  expectInvalidSchema({type:'number',multipleOf:'2'},4);
+  expectInvalidSchema({type:'number',multipleOf:Number.POSITIVE_INFINITY},4);
+  assert.doesNotThrow(()=>assertSchema({type:'number',multipleOf:0.5},1.5));
+});
