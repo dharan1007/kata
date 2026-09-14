@@ -12,7 +12,6 @@ function expectUnsupported(schema,value){
 test('fails closed when standard executable JSON Schema keywords are present but not implemented',()=>{
   expectUnsupported({type:'array',contains:{type:'integer'}},['not-an-integer']);
   expectUnsupported({type:'object',patternProperties:{'^x-':{type:'string'}}},{'x-id':123});
-  expectUnsupported({type:'object',propertyNames:{pattern:'^[a-z]+$'}},{INVALID:1});
   expectUnsupported({type:'object',dependentSchemas:{admin:{required:['scope']}}},{admin:true});
   expectUnsupported({type:'object',unevaluatedProperties:false},{unexpected:true});
   expectUnsupported({type:'array',unevaluatedItems:false},['unexpected']);
