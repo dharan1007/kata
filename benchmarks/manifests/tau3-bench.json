@@ -1,0 +1,20 @@
+{
+  "suite": "tau3-bench",
+  "description": "Tau3-bench current pinned release for API/tool workflow testing (airline, retail, telecom, banking-knowledge style domains). Results from incompatible releases are not comparable.",
+  "benchmarkRepo": "https://github.com/sierra-research/tau-bench",
+  "benchmarkCommit": "0000000000000000000000000000000000000000",
+  "benchmarkCommitNote": "Pin exact tau3 release SHA. Do not mix tau1/tau2 numbers.",
+  "method": "pinned-release-api-tool-eval",
+  "container": null,
+  "containerDigest": null,
+  "budgets": {
+    "toolCallBudget": 100,
+    "wallClockTimeoutSec": 1200,
+    "tokenBudget": 200000,
+    "retryPolicy": "record-every-retry"
+  },
+  "targets": {
+    "stableApiReplaySuccess": 0.99
+  },
+  "excludedFailures": []
+}

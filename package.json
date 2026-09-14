@@ -13,6 +13,8 @@
     "static-check": "node scripts/static-check.mjs",
     "check": "npm test && npm run build && npm run static-check && node --check bin/kata.mjs && node --check scripts/sbom.mjs",
     "sbom": "node scripts/sbom.mjs",
+    "check:contract": "node scripts/contract-gate.mjs",
+    "check:contract:strict": "node scripts/contract-gate.mjs --strict",
     "prepack": "npm run build && npm run sbom",
     "verify:package": "npm pack --dry-run"
   }

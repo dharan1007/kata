@@ -1,0 +1,24 @@
+{
+  "suite": "workarena-plus-plus",
+  "description": "ServiceNow WorkArena++ 682 knowledge-worker workflows for KATA workflow compilation (enterprise back-office focus). Fair method: train/dev demonstrations only, freeze, eval held-out.",
+  "benchmarkRepo": "https://github.com/ServiceNow/WorkArena",
+  "benchmarkCommit": "0000000000000000000000000000000000000000",
+  "benchmarkCommitNote": "Pin exact upstream SHA before any claim. Incompatible releases are not comparable.",
+  "taskCount": 682,
+  "method": "train-demonstrations-to-held-out-eval",
+  "forbidden": "No demonstration of the exact held-out task compared against a zero-shot agent.",
+  "container": null,
+  "containerDigest": null,
+  "budgets": {
+    "toolCallBudget": 200,
+    "wallClockTimeoutSec": 1800,
+    "tokenBudget": 500000,
+    "retryPolicy": "record-every-retry"
+  },
+  "targets": {
+    "note": "Do not claim top performance until held-out evidence demonstrates it.",
+    "productionBrowserApiQualification": 0.95,
+    "authoringLaborReduction": 0.75
+  },
+  "excludedFailures": []
+}

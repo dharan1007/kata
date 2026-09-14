@@ -1,0 +1,27 @@
+{
+  "suite": "kata-qualification",
+  "description": "Internal qualification corpus: replay success, authoring economics, drift recovery, credential hygiene. Uses real sandbox systems, not synthetic-only evidence.",
+  "benchmarkRepo": "local",
+  "benchmarkCommit": "0000000000000000000000000000000000000000",
+  "benchmarkCommitNote": "Internal corpus versioned alongside source; external suites remain required for competitive claims.",
+  "method": "sandbox-replay",
+  "container": null,
+  "containerDigest": null,
+  "budgets": {
+    "toolCallBudget": 100,
+    "wallClockTimeoutSec": 1200,
+    "tokenBudget": 200000,
+    "retryPolicy": "record-every-retry"
+  },
+  "targets": {
+    "stableApiReplaySuccess": 0.99,
+    "browserApiQualificationSuccess": 0.95,
+    "maxHumanCorrectionHours": 2,
+    "authoringLaborReduction": 0.75,
+    "maxApiOverheadRatio": 0.2,
+    "driftAutoRecovery": 0.9,
+    "embeddedCredentials": 0,
+    "unlabeledBranches": 0
+  },
+  "excludedFailures": []
+}
