@@ -4,7 +4,7 @@
 
 KATA combines live scholarly search, a durable browser workspace, demonstration-derived workflow programs, browser/API interoperability diagnostics, and one canonical semantic engine exposed through HTTPS, MCP, WebMCP, model-native schemas and a dependency-free CLI.
 
-[Try KATA](https://kata-webmcp.vercel.app/) · [Production contract](docs/PRODUCTION.md) · [Security](SECURITY.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
+[Try KATA](https://kata-webmcp.vercel.app) · [Production contract](docs/PRODUCTION.md) · [Security](SECURITY.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
 
 [![KATA Release Gate](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml/badge.svg)](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
