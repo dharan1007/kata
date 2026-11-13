@@ -6,7 +6,6 @@ KATA combines live scholarly search, a durable browser workspace, demonstration-
 
 [Try KATA](https://kata-webmcp.vercel.app) · [Production contract](docs/PRODUCTION.md) · [Security](SECURITY.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
 
-[![KATA Release Gate](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml/badge.svg)](https://github.com/dharan1007/kata/actions/workflows/release-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## What KATA does
