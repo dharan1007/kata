@@ -120,6 +120,8 @@ test('API equivalence requires matching postconditions', async () => {
     authorization: { scopes: ['write'] }
   });
   assert.equal(good.qualified, true);
+  assert.equal(good.evidence.downstreamMatch, undefined);
+  assert.equal(good.evidence.sideEffects, 'not-reported');
   const bad = await proveApiEquivalence({
     browserOutcome: { afterState: { status: 'APPROVED' } },
     apiExecutor: async () => ({ afterState: { status: 'REJECTED' } }),

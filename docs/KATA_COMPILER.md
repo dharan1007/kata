@@ -55,9 +55,15 @@ When permitted network or API evidence shows an authorized stable API
 reproduces a demonstrated browser sequence (for example `PATCH
 /customers/{id}` with `{"status":"APPROVED"}` replacing open, type, search,
 change-status, save clicks), the planner emits `api-first` for that node.
-The browser path is kept only when no stable API exists, the function lives
-in the UI, authorization blocks API access, or semantics cannot be reproduced
-through the API. See `lib/compiler/api-first.js`.
+The browser path is kept when no stable API exists, authorization blocks API
+access, or the compiler cannot prove the API path. `compilePipeline()` retains
+an API-first plan only when its candidate includes a successful, user-authorized
+browser capture with a valid digest and non-empty post-state, an explicit test
+input, and an executor whose result matches that post-state. Missing or
+mismatched proof returns the node to the browser path. This checks the recorded
+post-state only; it does not claim downstream equivalence or unreported side
+effects.
+See `lib/compiler/api-first.js`.
 
 ## Ambiguity
 

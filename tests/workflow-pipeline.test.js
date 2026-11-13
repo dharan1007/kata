@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compileTraces, compileTracesWithLabels } from '../lib/compiler/index.js';
+import { compilePipeline } from '../lib/compiler/pipeline.js';
+import { createDemonstration, appendDemonstrationEvent, finalizeDemonstration } from '../lib/capture/store.js';
 import { createTrace, appendTraceEvent } from '../lib/trace/model.js';
 import { executeDeterministicNode, executeDeterministicGraph } from '../lib/runtime/deterministic.js';
 import { isConsequentialKirNode, buildKirPactRequest, localAuthorizationPolicy } from '../lib/compiler/pact-kir.js';
@@ -41,6 +43,55 @@ test('labeled compiler keeps consensus but labels single-step variation', () => 
   const labeled = compileTracesWithLabels('refund', varied);
   assert.equal(labeled.status, 'NEEDS_LABEL');
   assert.ok(labeled.hypotheses.length >= 3);
+});
+
+test('API-first compilation falls back without captured evidence and an executor', async () => {
+  const step = { id: 'approve', provenance: { apiOperationId: 'updateCustomer' } };
+  const result = await compilePipeline({
+    demonstrations: [{ steps: [step] }, { steps: [step] }],
+    discoveredApis: [{ operationId: 'updateCustomer', method: 'PATCH', path: '/customers/{id}' }]
+  });
+  assert.equal(result.plan[0].strategy, 'browser-path');
+  assert.equal(result.plan[0].browserPathUsed, true);
+  assert.equal(result.plan[0].api, undefined);
+  assert.equal(result.equivalence.approve.qualified, false);
+});
+
+test('API equivalence executes the supplied API against captured postconditions', async () => {
+  const at = '2026-11-13T00:00:00.000Z';
+  let browserEvidence = createDemonstration({
+    workflowCandidateId: 'customer-approval',
+    source: { kind: 'BROWSER', authority: 'user-authorized' },
+    startedAt: at
+  });
+  browserEvidence = appendDemonstrationEvent(browserEvidence, {
+    id: 'page-state-1',
+    kind: 'page-state',
+    at,
+    operationType: 'updateCustomer',
+    afterState: { status: 'APPROVED' }
+  });
+  browserEvidence = finalizeDemonstration(browserEvidence, { outcome: { status: 'success' }, verifiedAt: at });
+  const testInput = { customerId: '123' };
+  const calls = [];
+  const step = { id: 'approve', provenance: { apiOperationId: 'updateCustomer' } };
+  const result = await compilePipeline({
+    demonstrations: [{ steps: [step] }, { steps: [step] }],
+    discoveredApis: [{
+      operationId: 'updateCustomer',
+      method: 'PATCH',
+      path: '/customers/{id}',
+      browserEvidence,
+      testInput,
+      executor: async (input) => {
+        calls.push(input);
+        return { afterState: { status: 'APPROVED' } };
+      }
+    }]
+  });
+  assert.deepEqual(calls, [testInput]);
+  assert.equal(result.plan[0].strategy, 'api-first');
+  assert.equal(result.equivalence.approve.proof.postconditionMatch, true);
 });
 
 test('deterministic executor runs pure nodes without LLM', () => {
