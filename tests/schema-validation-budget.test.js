@@ -37,6 +37,16 @@ test('bounds aggregate validation work across individually legal combinator bran
   );
 });
 
+test('charges deep const structural comparisons to the aggregate validation budget',()=>{
+  const expected=Array.from({length:260000},(_,index)=>index);
+  const actual=expected.slice();
+  actual[actual.length-1]=-1;
+  assert.throws(
+    ()=>assertSchema({const:expected},actual),
+    error=>error?.message==='INVALID_ARGUMENTS'&&error.details?.some(detail=>detail.includes('validation work budget exceeded'))
+  );
+});
+
 test('ordinary bounded nested schemas continue to validate normally',()=>{
   const schema={
     type:'object',
