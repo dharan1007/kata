@@ -1,0 +1,42 @@
+{
+  "repository": "kata",
+  "contractVersion": "A-G/1",
+  "updatedAt": "2026-09-14",
+  "note": "No PRODUCTION claims without external benchmark + real-workload evidence (Rules A, D, F).",
+  "capabilities": [
+    {
+      "id": "workflow-compiler",
+      "title": "Demonstration-to-agent workflow compiler",
+      "status": "EXPERIMENTAL",
+      "evidence": "Semantic KIR, 3-5 demo inference, NEEDS_LABEL, API-first planner, qualification and drift modules implemented with tests; held-out WorkArena++/WebArena/tau3 evidence pending.",
+      "nextEvidence": "benchmarks/manifests/workarena-plus-plus.json"
+    },
+    {
+      "id": "semantic-kir",
+      "title": "Typed semantic KIR with credential hygiene",
+      "status": "EXPERIMENTAL",
+      "evidence": "17 typed nodes validated, embedded-credential rejection tested, KIR v2 mapping verified.",
+      "nextEvidence": "benchmarks/results/kata-qualification/*/metrics.json"
+    },
+    {
+      "id": "qualification-runner",
+      "title": "Sandbox-gated workflow qualification",
+      "status": "EXPERIMENTAL",
+      "evidence": "11-state lifecycle with NEEDS_LABEL/QUALIFYING/RETIRED, DRIFTED/BLOCKED enforced; sandbox replay required.",
+      "nextEvidence": "benchmarks/results/kata-qualification/*/comparison.json"
+    },
+    {
+      "id": "kata-core",
+      "title": "KATA core capability",
+      "status": "EXPERIMENTAL",
+      "evidence": "Implementation + test suite green; external benchmark and real-workload evidence pending.",
+      "nextEvidence": "benchmarks/manifests/kata-reference.json"
+    },
+    {
+      "id": "multi-tenant-hostile-execution",
+      "title": "Shared multi-tenant hostile-code execution",
+      "status": "UNSUPPORTED",
+      "evidence": "Explicit non-goal without process/VM isolation boundary."
+    }
+  ]
+}

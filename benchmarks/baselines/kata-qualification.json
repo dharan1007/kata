@@ -1,0 +1,14 @@
+{
+  "suite": "kata-qualification",
+  "reference": "No external baseline claimed yet. Targets from KATA compiler contract apply; a release fails when metrics miss them (Rule D).",
+  "targets": {
+    "stableApiReplaySuccess": 0.99,
+    "browserApiQualificationSuccess": 0.95,
+    "maxHumanCorrectionHours": 2,
+    "authoringLaborReduction": 0.75,
+    "maxApiOverheadRatio": 0.2,
+    "driftAutoRecovery": 0.9,
+    "embeddedCredentials": 0,
+    "unlabeledBranches": 0
+  }
+}

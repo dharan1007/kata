@@ -1,0 +1,24 @@
+{
+  "suite": "webarena-verified",
+  "description": "WebArena-Verified 812 tasks plus 258-task hard subset for KATA compiled workflow eval. Fair method only.",
+  "benchmarkRepo": "https://github.com/web-arena-x/webarena",
+  "benchmarkCommit": "PIN_REAL_SHA_HERE",
+  "benchmarkCommitNote": "Pinned to actual upstream commit before claim",
+  "taskCount": 812,
+  "hardSubset": 258,
+  "method": "train-demonstrations-to-held-out-eval",
+  "forbidden": "No demonstration of the exact held-out task compared against a zero-shot agent.",
+  "container": null,
+  "containerDigest": null,
+  "budgets": {
+    "toolCallBudget": 200,
+    "wallClockTimeoutSec": 1800,
+    "tokenBudget": 500000,
+    "retryPolicy": "record-every-retry"
+  },
+  "targets": {
+    "note": "Do not claim top performance until held-out evidence demonstrates it.",
+    "productionBrowserApiQualification": 0.95
+  },
+  "excludedFailures": []
+}
